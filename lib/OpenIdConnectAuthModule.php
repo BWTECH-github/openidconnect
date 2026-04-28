@@ -4,6 +4,7 @@
  * @author Miroslav Bauer <Miroslav.Bauer@cesnet.cz>
  *
  * @copyright Copyright (c) 2022, ownCloud GmbH
+ * Modified by BW-Tech GmbH for owncloud.online (PHP 8.4).
  * @license GPL-2.0
  *
  * This program is free software; you can redistribute it and/or
@@ -35,57 +36,28 @@ use OCP\IUser;
 use OCP\IUserManager;
 
 /**
- * Class OpenIdConnectAuthModule - used in case ownCloud acts as relying party.
+ * Used in case ownCloud acts as relying party.
  * Mobile clients, desktop clients and phoenix will send an access token which
- * has been issued by the connected OpenID Connect Provider
- *
- * @package OCA\OpenIdConnect
+ * has been issued by the connected OpenID Connect Provider.
  */
 class OpenIdConnectAuthModule implements IAuthModule {
-	/** @var IUserManager */
-	private $manager;
-	/** @var ILogger */
-	private $logger;
-	/** @var ICacheFactory */
-	private $cacheFactory;
-	/** @var Client */
-	private $client;
-	/** @var UserLookupService */
-	private $lookupService;
-	/** @var AutoProvisioningService */
-	private $autoProvisioningService;
+	private readonly Logger $logger;
 
-	/**
-	 * OpenIdConnectAuthModule constructor.
-	 *
-	 * @param IUserManager $manager
-	 * @param ILogger $logger
-	 * @param ICacheFactory $cacheFactory
-	 * @param UserLookupService $lookupService
-	 * @param Client $client
-	 * @param AutoProvisioningService $autoProvisioningService
-	 */
 	public function __construct(
-		IUserManager $manager,
+		private readonly IUserManager $manager,
 		ILogger $logger,
-		ICacheFactory $cacheFactory,
-		UserLookupService $lookupService,
-		Client $client,
-		AutoProvisioningService $autoProvisioningService
+		private readonly ICacheFactory $cacheFactory,
+		private readonly UserLookupService $lookupService,
+		private readonly Client $client,
+		private readonly AutoProvisioningService $autoProvisioningService,
 	) {
-		$this->manager = $manager;
 		$this->logger = new Logger($logger);
-		$this->cacheFactory = $cacheFactory;
-		$this->client = $client;
-		$this->lookupService = $lookupService;
-		$this->autoProvisioningService = $autoProvisioningService;
 	}
 
 	/**
-	 * @param IRequest $request
-	 * @return IUser|null
 	 * @throws LoginException
 	 */
+	#[\Override]
 	public function auth(IRequest $request): ?IUser {
 		$authHeader = $request->getHeader('Authorization');
 
@@ -138,10 +110,9 @@ class OpenIdConnectAuthModule implements IAuthModule {
 	}
 
 	/**
-	 * @param IRequest $request
-	 * @return String
 	 * @codeCoverageIgnore
 	 */
+	#[\Override]
 	public function getUserPassword(IRequest $request): string {
 		return '';
 	}
@@ -160,9 +131,6 @@ class OpenIdConnectAuthModule implements IAuthModule {
 		return $this->client->verifyToken($token);
 	}
 
-	/**
-	 * @return ICache
-	 */
 	private function getCache(): ICache {
 		// TODO: needs cleanup and consolidation with SessionVerifier usage of the cache
 		return $this->cacheFactory->create('oca.openid-connect.2');
@@ -195,7 +163,7 @@ class OpenIdConnectAuthModule implements IAuthModule {
 		$cache = $this->getCache();
 		$cache->set($bearerToken, [
 			'uid' => $user->getUID(),
-			'exp' => $expiry
+			'exp' => $expiry,
 		]);
 	}
 }

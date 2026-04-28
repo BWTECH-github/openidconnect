@@ -3,6 +3,7 @@
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @copyright Copyright (c) 2020, ownCloud GmbH
+ * Modified by BW-Tech GmbH for owncloud.online (PHP 8.4).
  * @license GPL-2.0
  *
  * This program is free software; you can redistribute it and/or
@@ -30,25 +31,12 @@ use Sabre\DAV\Auth\Plugin;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 class EventHandler {
-	/** @var EventDispatcherInterface */
-	private $dispatcher;
-	/** @var IRequest */
-	private $request;
-	/** @var IUserSession */
-	private $userSession;
-	/** @var ISession */
-	private $session;
-
 	public function __construct(
-		EventDispatcherInterface $dispatcher,
-		IRequest $request,
-		IUserSession $userSession,
-		ISession $session
+		private readonly EventDispatcherInterface $dispatcher,
+		private readonly IRequest $request,
+		private readonly IUserSession $userSession,
+		private readonly ISession $session,
 	) {
-		$this->dispatcher = $dispatcher;
-		$this->request = $request;
-		$this->userSession = $userSession;
-		$this->session = $session;
 	}
 
 	public function registerEventHandler(): void {
@@ -67,7 +55,6 @@ class EventHandler {
 	}
 
 	/**
-	 * @return OpenIdSabreAuthBackend
 	 * @throws \OCP\AppFramework\QueryException
 	 * @codeCoverageIgnore
 	 */

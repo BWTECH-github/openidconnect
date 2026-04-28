@@ -4,6 +4,7 @@
  * @author Miroslav Bauer <Miroslav.Bauer@cesnet.cz>
  *
  * @copyright Copyright (c) 2022, ownCloud GmbH
+ * Modified by BW-Tech GmbH for owncloud.online (PHP 8.4).
  * @license GPL-2.0
  *
  * This program is free software; you can redistribute it and/or
@@ -97,7 +98,7 @@ class AutoProvisioningServiceTest extends TestCase {
 	 * @param bool $expected
 	 * @param array|null $config
 	 */
-	public function testAutoProvisionEnabled(bool $expected, array $config = null): void {
+	public function testAutoProvisionEnabled(bool $expected, ?array $config = null): void {
 		$this->client->method('getAutoProvisionConfig')->willReturn($config['auto-provision'] ?? []);
 		self::assertEquals($expected, $this->autoProvisioningService->autoProvisioningEnabled());
 	}
@@ -182,7 +183,7 @@ class AutoProvisioningServiceTest extends TestCase {
 	 * @param bool $expected
 	 * @param array|null $config
 	 */
-	public function testAutoUpdateEnabled(bool $expected, array $config = null): void {
+	public function testAutoUpdateEnabled(bool $expected, ?array $config = null): void {
 		$this->client->method('getAutoProvisionConfig')->willReturn($config['auto-provision'] ?? []);
 		$this->client->method('getAutoUpdateConfig')->willReturn($config['auto-provision']['update'] ?? []);
 		$this->client->method('getIdentityClaim')->willReturn($config['search-attribute'] ?? 'email');

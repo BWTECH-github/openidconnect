@@ -3,6 +3,7 @@
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @copyright Copyright (c) 2020, ownCloud GmbH
+ * Modified by BW-Tech GmbH for owncloud.online (PHP 8.4).
  * @license GPL-2.0
  *
  * This program is free software; you can redistribute it and/or
@@ -25,149 +26,70 @@ namespace OCA\OpenIdConnect;
 use OCP\ILogger;
 
 class Logger implements ILogger {
-	/**
-	 * @var ILogger
-	 */
-	private $logger;
+	private const APP_CONTEXT = 'OpenID';
 
-	/**
-	 * Logger constructor.
-	 *
-	 * @param ILogger $logger
-	 */
-	public function __construct(ILogger $logger) {
-		$this->logger = $logger;
+	public function __construct(
+		private readonly ILogger $logger,
+	) {
 	}
 
-	/**
-	 * System is unusable.
-	 *
-	 * @param string $message
-	 * @param array $context
-	 * @since 7.0.0
-	 */
+	#[\Override]
 	public function emergency($message, array $context = []) {
-		$context['app'] = 'OpenID';
+		$context['app'] = self::APP_CONTEXT;
 		$this->logger->emergency($message, $context);
 	}
 
-	/**
-	 * Action must be taken immediately.
-	 *
-	 * @param string $message
-	 * @param array $context
-	 * @since 7.0.0
-	 */
+	#[\Override]
 	public function alert($message, array $context = []) {
-		$context['app'] = 'OpenID';
+		$context['app'] = self::APP_CONTEXT;
 		$this->logger->alert($message, $context);
 	}
 
-	/**
-	 * Critical conditions.
-	 *
-	 * @param string $message
-	 * @param array $context
-	 * @since 7.0.0
-	 */
+	#[\Override]
 	public function critical($message, array $context = []) {
-		$context['app'] = 'OpenID';
+		$context['app'] = self::APP_CONTEXT;
 		$this->logger->critical($message, $context);
 	}
 
-	/**
-	 * Runtime errors that do not require immediate action but should typically
-	 * be logged and monitored.
-	 *
-	 * @param string $message
-	 * @param array $context
-	 * @since 7.0.0
-	 */
+	#[\Override]
 	public function error($message, array $context = []) {
-		$context['app'] = 'OpenID';
+		$context['app'] = self::APP_CONTEXT;
 		$this->logger->error($message, $context);
 	}
 
-	/**
-	 * Exceptional occurrences that are not errors.
-	 *
-	 * @param string $message
-	 * @param array $context
-	 * @since 7.0.0
-	 */
+	#[\Override]
 	public function warning($message, array $context = []) {
-		$context['app'] = 'OpenID';
+		$context['app'] = self::APP_CONTEXT;
 		$this->logger->warning($message, $context);
 	}
 
-	/**
-	 * Normal but significant events.
-	 *
-	 * @param string $message
-	 * @param array $context
-	 * @since 7.0.0
-	 */
+	#[\Override]
 	public function notice($message, array $context = []) {
-		$context['app'] = 'OpenID';
+		$context['app'] = self::APP_CONTEXT;
 		$this->logger->notice($message, $context);
 	}
 
-	/**
-	 * Interesting events.
-	 *
-	 * @param string $message
-	 * @param array $context
-	 * @since 7.0.0
-	 */
+	#[\Override]
 	public function info($message, array $context = []) {
-		$context['app'] = 'OpenID';
+		$context['app'] = self::APP_CONTEXT;
 		$this->logger->info($message, $context);
 	}
 
-	/**
-	 * Detailed debug information.
-	 *
-	 * @param string $message
-	 * @param array $context
-	 * @since 7.0.0
-	 */
+	#[\Override]
 	public function debug($message, array $context = []) {
-		$context['app'] = 'OpenID';
+		$context['app'] = self::APP_CONTEXT;
 		$this->logger->debug($message, $context);
 	}
 
-	/**
-	 * Logs with an arbitrary level.
-	 *
-	 * @param mixed $level
-	 * @param string $message
-	 * @param array $context
-	 * @return mixed
-	 * @since 7.0.0
-	 */
+	#[\Override]
 	public function log($level, $message, array $context = []) {
-		$context['app'] = 'OpenID';
+		$context['app'] = self::APP_CONTEXT;
 		return $this->logger->log($level, $message, $context);
 	}
 
-	/**
-	 * Logs an exception very detailed
-	 * An additional message can we written to the log by adding it to the
-	 * context.
-	 *
-	 * <code>
-	 * $logger->logException($ex, [
-	 *     'message' => 'Exception during cron job execution'
-	 * ]);
-	 * </code>
-	 *
-	 * @param \Exception | \Throwable $exception
-	 * @param array $context
-	 * @return void
-	 * @since 8.2.0
-	 */
+	#[\Override]
 	public function logException($exception, array $context = []) {
-		$context['app'] = 'OpenID';
+		$context['app'] = self::APP_CONTEXT;
 		$this->logger->logException($exception, $context);
 	}
 }

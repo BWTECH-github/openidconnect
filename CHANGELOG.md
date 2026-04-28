@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased] - XXXX-XX-XX
 
+### Changed
+
+- Forked as `bwtech/openidconnect` for [owncloud.online](https://github.com/BWTECH-github/owncloud.online) by BW-Tech GmbH.
+- Bumped PHP minimum requirement to 8.4.
+- Modernized code base to PHP 8.4 idioms (constructor property promotion, `readonly`, typed properties, `#[\Override]`).
+- Replaced ownCloud reusable workflows with self-contained CI that clones `BWTECH-github/owncloud.online` as the test core.
+- Updated `info.xml` branding (website, bugs, repository, author) to BW-Tech GmbH / owncloud.online.
+
 ## [2.3.3] - 2026-04-07
 
 ### Changed

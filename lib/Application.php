@@ -3,6 +3,7 @@
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @copyright Copyright (c) 2020, ownCloud GmbH
+ * Modified by BW-Tech GmbH for owncloud.online (PHP 8.4).
  * @license GPL-2.0
  *
  * This program is free software; you can redistribute it and/or
@@ -31,17 +32,13 @@ use OCP\AppFramework\App;
 class Application extends App {
 	public const APPID = 'openidconnect';
 
-	/** @var Logger */
-	private $logger;
+	private ?Logger $logger = null;
 
 	/**
-	 * Application constructor.
-	 *
-	 * @param array $urlParams
 	 * @codeCoverageIgnore
 	 */
 	public function __construct(array $urlParams = []) {
-		parent::__construct(Application::APPID, $urlParams);
+		parent::__construct(self::APPID, $urlParams);
 	}
 
 	/**

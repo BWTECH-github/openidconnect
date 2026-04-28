@@ -5,6 +5,7 @@
  * @author Miroslav Bauer <Miroslav.Bauer@cesnet.cz>
  *
  * @copyright Copyright (c) 2022, ownCloud GmbH
+ * Modified by BW-Tech GmbH for owncloud.online (PHP 8.4).
  * @license GPL-2.0
  *
  * This program is free software; you can redistribute it and/or
@@ -24,8 +25,8 @@
 
 namespace OCA\OpenIdConnect\Service;
 
-use OCA\OpenIdConnect\Client;
 use OC\User\LoginException;
+use OCA\OpenIdConnect\Client;
 use OCP\Http\Client\IClientService;
 use OCP\IAvatarManager;
 use OCP\IGroupManager;
@@ -38,57 +39,16 @@ use Symfony\Component\EventDispatcher\EventDispatcher;
 use Symfony\Component\EventDispatcher\GenericEvent;
 
 class AutoProvisioningService {
-	/**
-	 * @var IUserManager
-	 */
-	private $userManager;
-	/**
-	 * @var IGroupManager
-	 */
-	private $groupManager;
-	/**
-	 * @var IAvatarManager
-	 */
-	private $avatarManager;
-	/**
-	 * @var ILogger
-	 */
-	private $logger;
-	/**
-	 * @var IClientService
-	 */
-	private $clientService;
-	/**
-	 * @var Client
-	 */
-	private $client;
-	/**
-	 * @var EventDispatcher
-	 */
-	private $eventDispatcher;
-	/**
-	 * @var ISecureRandom
-	 */
-	private $secureRandom;
-
 	public function __construct(
-		IUserManager    $userManager,
-		IGroupManager   $groupManager,
-		IAvatarManager  $avatarManager,
-		IClientService  $clientService,
-		ILogger         $logger,
-		Client          $client,
-		EventDispatcher $eventDispatcher,
-		ISecureRandom   $secureRandom
+		private readonly IUserManager $userManager,
+		private readonly IGroupManager $groupManager,
+		private readonly IAvatarManager $avatarManager,
+		private readonly IClientService $clientService,
+		private readonly ILogger $logger,
+		private readonly Client $client,
+		private readonly EventDispatcher $eventDispatcher,
+		private readonly ISecureRandom $secureRandom,
 	) {
-		$this->userManager = $userManager;
-		$this->groupManager = $groupManager;
-		$this->avatarManager = $avatarManager;
-		$this->clientService = $clientService;
-		$this->logger = $logger;
-		$this->client = $client;
-		$this->eventDispatcher = $eventDispatcher;
-		$this->secureRandom = $secureRandom;
 	}
 
 	/**
@@ -146,7 +106,7 @@ class AutoProvisioningService {
 				$av->set($resource);
 			} catch (\Exception $ex) {
 				$this->logger->logException($ex, [
-					'message' => "Error setting profile picture $pictureUrl"
+					'message' => "Error setting profile picture $pictureUrl",
 				]);
 			}
 		}

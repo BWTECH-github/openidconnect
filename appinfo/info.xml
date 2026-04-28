@@ -16,22 +16,23 @@ OpenID Connect is an open standard for single sign-on and identity and access ma
 - Enterprise-grade security through the use of authentication security features (e.g., multi-factor authentication) and policies (e.g., automatic token expiration on certain conditions) provided by Identity Providers
 
 The integration requires an Identity Provider that supports OpenID Connect (e.g., Keycloak, Kopano Konnect, Ping Federate, ADFS, Azure AD or others).
-More information on setup, configuration and migration can be found in the ownCloud Documentation.</description>
+More information on setup, configuration and migration can be found in the ownCloud Documentation.
+
+This is a fork of the upstream `owncloud/openidconnect` app, modified by BW-Tech GmbH for owncloud.online and ported to PHP 8.4.</description>
     <licence>GPLv2</licence>
-    <author>Thomas Müller</author>
+    <author>ownCloud GmbH, modified by BW-Tech GmbH</author>
     <version>2.4.0</version>
     <namespace>OpenIdConnect</namespace>
     <category>integration</category>
     <documentation>
       <admin>https://doc.owncloud.com/server/latest/admin_manual/configuration/user/oidc/index.html</admin>
     </documentation>
-    <website>https://github.com/owncloud/openidconnect</website>
-    <bugs>https://github.com/owncloud/openidconnect/issues</bugs>
-    <repository type="git">https://github.com/owncloud/openidconnect.git</repository>
-    <screenshot>https://raw.githubusercontent.com/owncloud/screenshots/master/openidconnect/openidconnect.png</screenshot>
+    <website>https://bw.tech</website>
+    <bugs>https://github.com/BWTECH-github/owncloud.online/issues</bugs>
+    <repository type="git">https://github.com/BWTECH-github/owncloud.online.git</repository>
     <dependencies>
         <owncloud min-version="11" max-version="11"/>
-        <php min-version="8.3" />
+        <php min-version="8.4" />
     </dependencies>
     <types>
         <authentication/>

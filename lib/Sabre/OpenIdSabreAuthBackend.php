@@ -3,6 +3,7 @@
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @copyright Copyright (c) 2020, ownCloud GmbH
+ * Modified by BW-Tech GmbH for owncloud.online (PHP 8.4).
  * @license GPL-2.0
  *
  * This program is free software; you can redistribute it and/or
@@ -34,51 +35,22 @@ use Sabre\HTTP\ResponseInterface;
 class OpenIdSabreAuthBackend implements BackendInterface {
 	public const DAV_AUTHENTICATED = Auth::DAV_AUTHENTICATED;
 
-	/**
-	 * This is the prefix that will be used to generate principal urls.
-	 *
-	 * @var string
-	 */
-	protected $principalPrefix;
-
-	/** @var ISession */
-	private $session;
-
-	/** @var Session */
-	private $userSession;
-
-	/** @var IRequest */
-	private $request;
-
-	/** @var OpenIdConnectAuthModule */
-	private $authModule;
+	private readonly Session $userSession;
 
 	/**
-	 * OAuth2 constructor.
-	 *
-	 * @param ISession $session The session.
-	 * @param IUserSession $userSession The user session.
-	 * @param IRequest $request The request.
-	 * @param OpenIdConnectAuthModule $authModule
-	 * @param string $principalPrefix The principal prefix.
 	 * @throws \Exception
 	 */
 	public function __construct(
-		ISession $session,
+		private readonly ISession $session,
 		IUserSession $userSession,
-		IRequest $request,
-		OpenIdConnectAuthModule $authModule,
-		$principalPrefix = 'principals/users/'
+		private readonly IRequest $request,
+		private readonly OpenIdConnectAuthModule $authModule,
+		protected readonly string $principalPrefix = 'principals/users/',
 	) {
 		if (!$userSession instanceof Session) {
 			throw new \Exception('We rely on internal implementation!');
 		}
-
-		$this->session = $session;
 		$this->userSession = $userSession;
-		$this->request = $request;
-		$this->authModule = $authModule;
-		$this->principalPrefix = $principalPrefix;
 	}
 
 	/**
@@ -88,28 +60,21 @@ class OpenIdSabreAuthBackend implements BackendInterface {
 	 * account was changed.
 	 *
 	 * @see https://github.com/owncloud/core/issues/13245
-	 *
-	 * @param string $username The username.
-	 * @return bool True if the user initially authenticated via DAV, false otherwise.
 	 */
 	private function isDavAuthenticated(string $username): bool {
-		return $this->session->get(self::DAV_AUTHENTICATED) !== null &&
-			$this->session->get(self::DAV_AUTHENTICATED) === $username;
+		return $this->session->get(self::DAV_AUTHENTICATED) !== null
+			&& $this->session->get(self::DAV_AUTHENTICATED) === $username;
 	}
 
 	/**
 	 * Validates a Bearer token.
 	 *
-	 * This method should return the full principal url, or false if the
-	 * token was incorrect.
-	 *
-	 * @param string $token The Bearer token.
 	 * @return string|false The full principal url, if the token is valid, false otherwise.
 	 * @throws \OC\User\LoginException
 	 */
 	protected function validateBearerToken($type, $token) {
-		if ($this->userSession->isLoggedIn() &&
-			$this->isDavAuthenticated($this->userSession->getUser()->getUID())) {
+		if ($this->userSession->isLoggedIn()
+			&& $this->isDavAuthenticated($this->userSession->getUser()->getUID())) {
 			try {
 				// verify the bearer token
 				$tokenUser = $this->authModule->authToken($type, $token);
@@ -122,7 +87,7 @@ class OpenIdSabreAuthBackend implements BackendInterface {
 				$this->setupFilesystem($userId);
 				$this->session->close();
 				return $this->principalPrefix . $userId;
-			} catch (\Exception $ex) {
+			} catch (\Exception) {
 				$this->session->close();
 				return false;
 			}
@@ -142,20 +107,20 @@ class OpenIdSabreAuthBackend implements BackendInterface {
 
 			$this->session->close();
 			return false;
-		} catch (\Exception $ex) {
+		} catch (\Exception) {
 			$this->session->close();
 			return false;
 		}
 	}
 
 	/**
-	 * @param string $userId
 	 * @codeCoverageIgnore
 	 */
 	protected function setupFilesystem(string $userId = ''): void {
 		\OC_Util::setupFS($userId);
 	}
 
+	#[\Override]
 	public function check(RequestInterface $request, ResponseInterface $response) {
 		[$type, $token] = $this->getToken($request);
 
@@ -170,13 +135,14 @@ class OpenIdSabreAuthBackend implements BackendInterface {
 		return [true, $principalUrl];
 	}
 
+	#[\Override]
 	public function challenge(RequestInterface $request, ResponseInterface $response) {
 		// setup realm
 		$defaults = new \OC_Defaults();
 		$realm = $defaults->getName();
 
-		$response->addHeader('WWW-Authenticate', 'Bearer realm="'.$realm.'"');
-		$response->addHeader('WWW-Authenticate', 'PoP realm="'.$realm.'"');
+		$response->addHeader('WWW-Authenticate', 'Bearer realm="' . $realm . '"');
+		$response->addHeader('WWW-Authenticate', 'PoP realm="' . $realm . '"');
 		$response->setStatus(401);
 	}
 

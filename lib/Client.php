@@ -5,6 +5,7 @@
  * @author Ilja Neumann <ineumann@owncloud.com>
  *
  * @copyright Copyright (c) 2022, ownCloud GmbH
+ * Modified by BW-Tech GmbH for owncloud.online (PHP 8.4).
  * @license GPL-2.0
  *
  * This program is free software; you can redistribute it and/or
@@ -27,49 +28,23 @@ use Jumbojett\OpenIDConnectClient;
 use Jumbojett\OpenIDConnectClientException;
 use OCP\Http\Client\IClientService;
 use OCP\IConfig;
+use OCP\ILogger;
 use OCP\ISession;
 use OCP\IURLGenerator;
-use OCP\ILogger;
 
 class Client extends OpenIDConnectClient {
-	/** @var ISession */
-	private $session;
-	/** @var IConfig */
-	private $config;
-	/** @var array */
-	private $wellKnownConfig;
-	/** @var ILogger */
-	private $logger;
+	private ?array $wellKnownConfig = null;
 
 	/**
-	 * @var IURLGenerator
-	 */
-	private $generator;
-	private IClientService $clientService;
-
-	/**
-	 * Client constructor.
-	 *
-	 * @param IConfig $config
-	 * @param IURLGenerator $generator
-	 * @param ISession $session
-	 * @param ILogger $logger
-	 *
 	 * @throws \JsonException
 	 */
 	public function __construct(
-		IConfig $config,
-		IURLGenerator $generator,
-		ISession $session,
-		ILogger $logger,
-		IClientService $clientService
+		private readonly IConfig $config,
+		private readonly IURLGenerator $generator,
+		private readonly ISession $session,
+		private readonly ILogger $logger,
+		private readonly IClientService $clientService,
 	) {
-		$this->session = $session;
-		$this->config = $config;
-		$this->generator = $generator;
-		$this->logger = $logger;
-		$this->clientService = $clientService;
-
 		$openIdConfig = $this->getOpenIdConfig();
 		if ($openIdConfig === null) {
 			return;
@@ -141,9 +116,7 @@ class Client extends OpenIDConnectClient {
 		return $this->getOpenIdConfig()['mode'] ?? 'userid';
 	}
 
-	/**
-	 * @return object|null
-	 */
+	#[\Override]
 	public function getAccessTokenPayload(): ?object {
 		if ($this->accessToken === '') {
 			return null;
@@ -202,11 +175,12 @@ class Client extends OpenIDConnectClient {
 		return $introData->exp;
 	}
 
+	#[\Override]
 	public function introspectToken($token, $token_type_hint = '', $clientId = null, $clientSecret = null) {
 		try {
 			# test if introspection is possible ...
 			$this->getProviderConfigValue('introspection_endpoint');
-		} catch (OpenIDConnectClientException $e) {
+		} catch (OpenIDConnectClientException) {
 			return null;
 		}
 
@@ -251,7 +225,7 @@ class Client extends OpenIDConnectClient {
 	}
 
 	public function getDisplayNameClaim(): ?string {
-		return $this->getAutoProvisionConfig()['display-name-claim'] ??	null;
+		return $this->getAutoProvisionConfig()['display-name-claim'] ?? null;
 	}
 
 	public function getPictureClaim(): ?string {
@@ -284,10 +258,9 @@ class Client extends OpenIDConnectClient {
 	}
 
 	/**
-	 * Perform a RFC8693 Token Exchange
+	 * Perform a RFC8693 Token Exchange.
 	 * https://datatracker.ietf.org/doc/html/rfc8693
 	 *
-	 * @param string $subjectToken
 	 * @param string $tokenType Type of the token to exchange 'refresh-token' or 'access-token'
 	 * @return string Access Token
 	 * @throws OpenIDConnectClientException
@@ -319,12 +292,14 @@ class Client extends OpenIDConnectClient {
 	/**
 	 * @codeCoverageIgnore
 	 */
+	#[\Override]
 	protected function startSession() {
 	}
 
 	/**
 	 * @codeCoverageIgnore
 	 */
+	#[\Override]
 	protected function setSessionKey($key, $value) {
 		$this->session->set($key, $value);
 	}
@@ -332,6 +307,7 @@ class Client extends OpenIDConnectClient {
 	/**
 	 * @codeCoverageIgnore
 	 */
+	#[\Override]
 	protected function getSessionKey($key) {
 		return $this->session->get($key);
 	}
@@ -339,6 +315,7 @@ class Client extends OpenIDConnectClient {
 	/**
 	 * @codeCoverageIgnore
 	 */
+	#[\Override]
 	protected function unsetSessionKey($key) {
 		$this->session->remove($key);
 	}
@@ -346,6 +323,7 @@ class Client extends OpenIDConnectClient {
 	/**
 	 * @codeCoverageIgnore
 	 */
+	#[\Override]
 	protected function commitSession() {
 	}
 
@@ -353,6 +331,7 @@ class Client extends OpenIDConnectClient {
 	 * @codeCoverageIgnore
 	 * @throws OpenIDConnectClientException
 	 */
+	#[\Override]
 	protected function fetchURL($url, $post_body = null, $headers = []) {
 		$this->logger->debug("Fetching URL: $url");
 
@@ -404,10 +383,12 @@ class Client extends OpenIDConnectClient {
 	/**
 	 * @codeCoverageIgnore
 	 */
+	#[\Override]
 	public function getCodeChallengeMethod() {
 		return 'S256';
 	}
 
+	#[\Override]
 	protected function verifyJWKHeader($jwk) {
 		$openIdConfig = $this->getOpenIdConfig();
 		if (isset($openIdConfig['jwt-self-signed-jwk-header-supported']) && $openIdConfig['jwt-self-signed-jwk-header-supported']) {
@@ -419,10 +400,10 @@ class Client extends OpenIDConnectClient {
 	/**
 	 * @codeCoverageIgnore
 	 *
-	 * @return bool
 	 * @throws OpenIDConnectClientException
 	 * @throws \JsonException
 	 */
+	#[\Override]
 	public function authenticate() : bool {
 		$redirectUrl = $this->generator->linkToRouteAbsolute('openidconnect.loginFlow.login');
 

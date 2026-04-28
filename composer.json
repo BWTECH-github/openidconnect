@@ -1,12 +1,12 @@
 {
-    "name": "owncloud/openidconnect",
+    "name": "bwtech/openidconnect",
     "type": "library",
-    "description": "OpenId Connect app for ownCloud",
+    "description": "OpenId Connect app for ownCloud (PHP 8.4 fork of owncloud/openidconnect for owncloud.online)",
     "provide": {
         "phpseclib/phpseclib": "^3.0.36"
     },
     "require": {
-        "php": ">=8.3",
+        "php": ">=8.4",
         "jumbojett/openid-connect-php": "^1.0.2"
     },
     "require-dev": {
@@ -29,7 +29,7 @@
         "optimize-autoloader": true,
         "classmap-authoritative": false,
         "platform": {
-            "php": "8.3"
+            "php": "8.4"
         },
         "allow-plugins": {
             "bamarni/composer-bin-plugin": true
