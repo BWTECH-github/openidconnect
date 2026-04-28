@@ -19,45 +19,106 @@ concurrency:
 
 env:
   APP_NAME: openidconnect
-  PHP_VERSIONS: '["8.3"]'
+  PHP_VERSION: '8.4'
 
 jobs:
-  get-vars:
+  lint-and-style:
+    name: Lint and code style
     runs-on: ubuntu-latest
-    outputs:
-      app-name: ${{ env.APP_NAME }}
-      php-versions: ${{ env.PHP_VERSIONS }}
     steps:
-      - name: Set variables
+      - name: Checkout app
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          coverage: none
+          tools: composer:v2
+
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: composer-${{ env.PHP_VERSION }}-${{ hashFiles('composer.lock', 'vendor-bin/owncloud-codestyle/composer.json') }}
+          restore-keys: |
+            composer-${{ env.PHP_VERSION }}-
+
+      - name: Install Composer dependencies
+        run: composer install --no-progress --no-interaction --prefer-dist
+
+      - name: php -l (syntax check)
         run: |
-          echo "App name $APP_NAME"
-          echo "PHP versions string: $PHP_VERSIONS"
+          set -e
+          find appinfo lib templates tests -name '*.php' -print0 \
+            | xargs -0 -n1 -P4 php -l
 
-  semantic-git-messages:
-    name: Commits
-    uses: owncloud/reusable-workflows/.github/workflows/semantic-git-message.yml@main
+      - name: Install owncloud-codestyle bin
+        run: composer bin owncloud-codestyle install --no-progress --no-interaction --prefer-dist
 
-  php-code-style:
-    name: PHP Code Style
-    needs:
-      - get-vars
-    uses: owncloud/reusable-workflows/.github/workflows/php-codestyle.yml@main
-    with:
-      app-name: ${{ needs.get-vars.outputs.app-name }}
-      php-versions: ${{ needs.get-vars.outputs.php-versions }}
+      - name: Run php-cs-fixer (dry-run)
+        run: |
+          php -d zend.enable_gc=0 vendor-bin/owncloud-codestyle/vendor/bin/php-cs-fixer \
+            fix -v --diff --allow-risky=yes --dry-run
 
-  php-unit:
-    name: PHP Unit
-    needs:
-      - get-vars
-    uses: owncloud/reusable-workflows/.github/workflows/php-unit.yml@main
-    with:
-      app-name: ${{ needs.get-vars.outputs.app-name }}
-      php-versions: ${{ needs.get-vars.outputs.php-versions }}
+  integration:
+    name: Integration smoke (clone owncloud.online core)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout owncloud.online core
+        uses: actions/checkout@v4
+        with:
+          repository: BWTECH-github/owncloud.online
+          ref: main
+          path: server
 
-  build:
-    name: Build
-    needs:
-      - php-code-style
-      - php-unit
-    uses: owncloud/reusable-workflows/.github/workflows/build.yml@main
+      - name: Checkout ${{ env.APP_NAME }} into apps/
+        uses: actions/checkout@v4
+        with:
+          path: server/apps/${{ env.APP_NAME }}
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: gd, intl, mbstring, xml, zip, sqlite3, pdo_sqlite, curl, openssl
+          coverage: none
+          tools: composer:v2
+
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: composer-integration-${{ env.PHP_VERSION }}-${{ hashFiles('server/composer.lock', 'server/apps/${{ env.APP_NAME }}/composer.lock') }}
+          restore-keys: |
+            composer-integration-${{ env.PHP_VERSION }}-
+
+      - name: Install core Composer dependencies
+        working-directory: server
+        run: |
+          if [ -f composer.json ]; then
+            composer install --no-progress --no-interaction --prefer-dist --no-dev || true
+          fi
+
+      - name: Install app Composer dependencies
+        working-directory: server/apps/${{ env.APP_NAME }}
+        run: composer install --no-progress --no-interaction --prefer-dist --no-dev
+
+      - name: Install ownCloud (sqlite)
+        working-directory: server
+        run: |
+          mkdir -p data
+          php occ maintenance:install \
+            --database sqlite \
+            --admin-user admin \
+            --admin-pass admin
+
+      - name: Enable ${{ env.APP_NAME }}
+        working-directory: server
+        run: php occ app:enable ${{ env.APP_NAME }}
+
+      - name: Verify app is enabled
+        working-directory: server
+        run: |
+          php occ app:list | tee app-list.txt
+          grep -E "^\s*-\s*${APP_NAME}:" app-list.txt
