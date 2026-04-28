@@ -1,0 +1,48 @@
+name: Dist
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build distribution tarball
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          coverage: none
+          tools: composer:v2
+
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer
+          key: composer-dist-8.4-${{ hashFiles('composer.lock') }}
+          restore-keys: |
+            composer-dist-8.4-
+
+      - name: Install runtime dependencies
+        run: composer install --no-progress --no-interaction --prefer-dist --no-dev
+
+      - name: Build appstore tarball
+        run: make dist
+
+      - name: Upload tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: openidconnect-dist
+          path: build/dist/openidconnect.tar.gz
+          if-no-files-found: error
