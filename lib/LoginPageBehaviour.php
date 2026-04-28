@@ -3,6 +3,7 @@
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @copyright Copyright (c) 2020, ownCloud GmbH
+ * Modified by BW-Tech GmbH for owncloud.online (PHP 8.4).
  * @license GPL-2.0
  *
  * This program is free software; you can redistribute it and/or
@@ -27,25 +28,12 @@ use OCP\IURLGenerator;
 use OCP\IUserSession;
 
 class LoginPageBehaviour {
-	/** @var Logger */
-	private $logger;
-	/** @var IUserSession */
-	private $userSession;
-	/** @var IURLGenerator */
-	private $urlGenerator;
-	/** @var IRequest */
-	private $request;
-
 	public function __construct(
-		Logger $logger,
-		IUserSession $userSession,
-		IURLGenerator $urlGenerator,
-		IRequest $request
+		private readonly Logger $logger,
+		private readonly IUserSession $userSession,
+		private readonly IURLGenerator $urlGenerator,
+		private readonly IRequest $request,
 	) {
-		$this->logger = $logger;
-		$this->userSession = $userSession;
-		$this->urlGenerator = $urlGenerator;
-		$this->request = $request;
 	}
 
 	public function handleLoginPageBehaviour(array $openIdConfig): void {
@@ -82,7 +70,6 @@ class LoginPageBehaviour {
 	}
 
 	/**
-	 * @param string $loginUrl
 	 * @codeCoverageIgnore
 	 */
 	public function redirect(string $loginUrl): void {
@@ -91,7 +78,6 @@ class LoginPageBehaviour {
 	}
 
 	/**
-	 * @param string $loginName
 	 * @codeCoverageIgnore
 	 */
 	public function registerAlternativeLogin(string $loginName): void {

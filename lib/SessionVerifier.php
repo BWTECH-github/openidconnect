@@ -3,6 +3,7 @@
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @copyright Copyright (c) 2020, ownCloud GmbH
+ * Modified by BW-Tech GmbH for owncloud.online (PHP 8.4).
  * @license GPL-2.0
  *
  * This program is free software; you can redistribute it and/or
@@ -30,33 +31,14 @@ use OCP\IUserSession;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 
 class SessionVerifier {
-	/** @var Logger */
-	private $logger;
-	/** @var ISession */
-	private $session;
-	/** @var ICacheFactory */
-	private $cacheFactory;
-	/** @var EventDispatcherInterface */
-	private $eventDispatcher;
-	/** @var Client */
-	private $client;
-	/** @var IUserSession */
-	private $userSession;
-
 	public function __construct(
-		Logger $logger,
-		ISession $session,
-		IUserSession $userSession,
-		ICacheFactory $cacheFactory,
-		EventDispatcherInterface $eventDispatcher,
-		Client $client
+		private readonly Logger $logger,
+		private readonly ISession $session,
+		private readonly IUserSession $userSession,
+		private readonly ICacheFactory $cacheFactory,
+		private readonly EventDispatcherInterface $eventDispatcher,
+		private readonly Client $client,
 	) {
-		$this->logger = $logger;
-		$this->session = $session;
-		$this->userSession = $userSession;
-		$this->cacheFactory = $cacheFactory;
-		$this->eventDispatcher = $eventDispatcher;
-		$this->client = $client;
 	}
 
 	/**
@@ -139,7 +121,6 @@ class SessionVerifier {
 	}
 
 	/**
-	 * @param int $exp
 	 * @throws OpenIDConnectClientException
 	 * @throws HintException
 	 * @throws \JsonException

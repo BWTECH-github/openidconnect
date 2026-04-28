@@ -3,6 +3,7 @@
  * @author Thomas Müller <thomas.mueller@tmit.eu>
  *
  * @copyright Copyright (c) 2020, ownCloud GmbH
+ * Modified by BW-Tech GmbH for owncloud.online (PHP 8.4).
  * @license GPL-2.0
  *
  * This program is free software; you can redistribute it and/or
@@ -28,32 +29,14 @@ use OCP\IUser;
 use OCP\IUserManager;
 
 class UserLookupService {
-	/**
-	 * @var IUserManager
-	 */
-	private $userManager;
-	/**
-	 * @var Client
-	 */
-	private $client;
-	/**
-	 * @var AutoProvisioningService
-	 */
-	private $autoProvisioningService;
-
 	public function __construct(
-		IUserManager $userManager,
-		Client $client,
-		AutoProvisioningService $autoProvisioningService
+		private readonly IUserManager $userManager,
+		private readonly Client $client,
+		private readonly AutoProvisioningService $autoProvisioningService,
 	) {
-		$this->userManager = $userManager;
-		$this->client = $client;
-		$this->autoProvisioningService = $autoProvisioningService;
 	}
 
 	/**
-	 * @param mixed $userInfo
-	 * @return IUser
 	 * @throws LoginException
 	 * @throws HintException
 	 */
@@ -62,10 +45,7 @@ class UserLookupService {
 		if ($openIdConfig === null) {
 			throw new HintException('Configuration issue in openidconnect app');
 		}
-		$searchByEmail = true;
-		if ($this->client->mode() === 'userid') {
-			$searchByEmail = false;
-		}
+		$searchByEmail = $this->client->mode() !== 'userid';
 		$attribute = $this->client->getIdentityClaim();
 		if (!\property_exists($userInfo, $attribute)) {
 			throw new LoginException("Configured attribute $attribute is not known.");

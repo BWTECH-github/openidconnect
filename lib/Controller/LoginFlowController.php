@@ -4,6 +4,7 @@
  * @author Miroslav Bauer <Miroslav.Bauer@cesnet.cz>
  *
  * @copyright Copyright (c) 2022, ownCloud GmbH
+ * Modified by BW-Tech GmbH for owncloud.online (PHP 8.4).
  * @license GPL-2.0
  *
  * This program is free software; you can redistribute it and/or
@@ -43,58 +44,27 @@ use OCP\IUserSession;
 use OCP\Util;
 
 class LoginFlowController extends Controller {
-	/**
-	 * @var ISession
-	 */
-	private $session;
-	/**
-	 * @var UserLookupService
-	 */
-	private $userLookup;
-	/**
-	 * @var Session
-	 */
-	private $userSession;
-	/**
-	 * @var Client
-	 */
-	private $client;
-	/**
-	 * @var ILogger
-	 */
-	private $logger;
-	/**
-	 * @var ICacheFactory
-	 */
-	private $memCacheFactory;
-	/**
-	 * @var AutoProvisioningService
-	 */
-	private $autoProvisioningService;
+	private readonly Session $userSession;
+	private readonly Logger $logger;
 
 	public function __construct(
 		string $appName,
 		IRequest $request,
-		UserLookupService $userLookup,
+		private readonly UserLookupService $userLookup,
 		IUserSession $userSession,
-		ISession $session,
+		private readonly ISession $session,
 		ILogger $logger,
-		Client $client,
-		ICacheFactory $memCacheFactory,
-		AutoProvisioningService $autoProvisioningService
+		private readonly Client $client,
+		private readonly ICacheFactory $memCacheFactory,
+		private readonly AutoProvisioningService $autoProvisioningService,
 	) {
 		parent::__construct($appName, $request);
 		if (!$userSession instanceof Session) {
 			throw new \Exception('We rely on internal implementation!');
 		}
 
-		$this->session = $session;
-		$this->userLookup = $userLookup;
 		$this->userSession = $userSession;
-		$this->client = $client;
 		$this->logger = new Logger($logger);
-		$this->memCacheFactory = $memCacheFactory;
-		$this->autoProvisioningService = $autoProvisioningService;
 	}
 
 	/**
@@ -155,8 +125,8 @@ class LoginFlowController extends Controller {
 		}
 
 		// trigger login process
-		if ($this->userSession->createSessionToken($this->request, $user->getUID(), $user->getUID()) &&
-			$this->userSession->loginUser($user, null, OpenIdConnectAuthModule::class)) {
+		if ($this->userSession->createSessionToken($this->request, $user->getUID(), $user->getUID())
+			&& $this->userSession->loginUser($user, null, OpenIdConnectAuthModule::class)) {
 			$this->session->set('oca.openid-connect.id-token', $openid->getIdToken());
 			$this->session->set('oca.openid-connect.access-token', $openid->getAccessToken());
 			$this->session->set('oca.openid-connect.refresh-token', $openid->getRefreshToken());
@@ -191,11 +161,8 @@ class LoginFlowController extends Controller {
 	 * @NoAdminRequired
 	 * @PublicPage
 	 * @UseSession
-	 * @param string|null $iss
-	 * @param string|null $sid
-	 * @return Response
 	 */
-	public function logout($iss = null, $sid = null): Response {
+	public function logout(?string $iss = null, ?string $sid = null): Response {
 		// fail fast if not configured
 		$openIdConfig = $this->client->getOpenIdConfig();
 		if ($openIdConfig === null) {
@@ -231,15 +198,12 @@ class LoginFlowController extends Controller {
 
 		$resp = new Response();
 		$resp->setHeaders([
-			'Cache-Control' =>  'no-cache, no-store',
-			'Pragma' => 'no-cache'
+			'Cache-Control' => 'no-cache, no-store',
+			'Pragma' => 'no-cache',
 		]);
 		return $resp;
 	}
 
-	/**
-	 * @return string
-	 */
 	protected function getDefaultUrl(): string {
 		$openid = $this->getOpenIdConnectClient();
 		if ($openid) {
@@ -252,10 +216,7 @@ class LoginFlowController extends Controller {
 		return \OC_Util::getDefaultPageUrl();
 	}
 
-	/**
-	 * @return Client|null
-	 */
-	private function getOpenIdConnectClient() {
+	private function getOpenIdConnectClient(): ?Client {
 		if ($this->client->getOpenIdConfig() === null) {
 			return null;
 		}
