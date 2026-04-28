@@ -34,61 +34,61 @@ class Logger implements ILogger {
 	}
 
 	#[\Override]
-	public function emergency($message, array $context = []) {
+	public function emergency($message, array $context = []): void {
 		$context['app'] = self::APP_CONTEXT;
 		$this->logger->emergency($message, $context);
 	}
 
 	#[\Override]
-	public function alert($message, array $context = []) {
+	public function alert($message, array $context = []): void {
 		$context['app'] = self::APP_CONTEXT;
 		$this->logger->alert($message, $context);
 	}
 
 	#[\Override]
-	public function critical($message, array $context = []) {
+	public function critical($message, array $context = []): void {
 		$context['app'] = self::APP_CONTEXT;
 		$this->logger->critical($message, $context);
 	}
 
 	#[\Override]
-	public function error($message, array $context = []) {
+	public function error($message, array $context = []): void {
 		$context['app'] = self::APP_CONTEXT;
 		$this->logger->error($message, $context);
 	}
 
 	#[\Override]
-	public function warning($message, array $context = []) {
+	public function warning($message, array $context = []): void {
 		$context['app'] = self::APP_CONTEXT;
 		$this->logger->warning($message, $context);
 	}
 
 	#[\Override]
-	public function notice($message, array $context = []) {
+	public function notice($message, array $context = []): void {
 		$context['app'] = self::APP_CONTEXT;
 		$this->logger->notice($message, $context);
 	}
 
 	#[\Override]
-	public function info($message, array $context = []) {
+	public function info($message, array $context = []): void {
 		$context['app'] = self::APP_CONTEXT;
 		$this->logger->info($message, $context);
 	}
 
 	#[\Override]
-	public function debug($message, array $context = []) {
+	public function debug($message, array $context = []): void {
 		$context['app'] = self::APP_CONTEXT;
 		$this->logger->debug($message, $context);
 	}
 
 	#[\Override]
-	public function log($level, $message, array $context = []) {
+	public function log($level, $message, array $context = []): void {
 		$context['app'] = self::APP_CONTEXT;
-		return $this->logger->log($level, $message, $context);
+		$this->logger->log($level, $message, $context);
 	}
 
 	#[\Override]
-	public function logException($exception, array $context = []) {
+	public function logException($exception, array $context = []): void {
 		$context['app'] = self::APP_CONTEXT;
 		$this->logger->logException($exception, $context);
 	}
