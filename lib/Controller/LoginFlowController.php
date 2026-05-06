@@ -213,7 +213,7 @@ class LoginFlowController extends Controller {
 			}
 		}
 
-		return \OC_Util::getDefaultPageUrl();
+		return \call_user_func(['OC_Util', 'getDefaultPageUrl']);
 	}
 
 	private function getOpenIdConnectClient(): ?Client {

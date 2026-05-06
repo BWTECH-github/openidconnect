@@ -24,6 +24,10 @@
  */
 namespace OCA\OpenIdConnect;
 
+require_once __DIR__ . '/bootstrap.php';
+loadComposerDependencies();
+assertComposerDependencies();
+
 use Jumbojett\OpenIDConnectClient;
 use Jumbojett\OpenIDConnectClientException;
 use OCP\Http\Client\IClientService;
@@ -33,7 +37,7 @@ use OCP\ISession;
 use OCP\IURLGenerator;
 
 class Client extends OpenIDConnectClient {
-	private ?array $wellKnownConfig = null;
+	private ?object $wellKnownConfig = null;
 
 	/**
 	 * @throws \JsonException
@@ -78,18 +82,19 @@ class Client extends OpenIDConnectClient {
 	public function getOpenIdConfig() {
 		$configRaw = $this->config->getAppValue(Application::APPID, 'openid-connect', null);
 		if ($configRaw) {
-			$config = json_decode($configRaw, true);
-			if (json_last_error() !== JSON_ERROR_NONE) {
-				$this->logger->error(
-					'Loaded config from DB is not valid (malformed JSON); JSON Last Error: ' . json_last_error(),
-					['app' => Application::APPID]
-				);
-				return $this->config->getSystemValue('openid-connect', null);
+			$config = \json_decode($configRaw, true);
+			if (\json_last_error() === JSON_ERROR_NONE && \is_array($config)) {
+				return $config;
 			}
-			return $config;
+
+			$this->logger->error(
+				'Loaded config from DB is not valid (malformed JSON); JSON Last Error: ' . \json_last_error(),
+				['app' => Application::APPID]
+			);
 		}
 
-		return $this->config->getSystemValue('openid-connect', null);
+		$config = $this->config->getSystemValue('openid-connect', null);
+		return \is_array($config) ? $config : null;
 	}
 
 	public function getAutoProvisionConfig(): array {

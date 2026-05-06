@@ -60,6 +60,9 @@ class OpenIdConnectAuthModule implements IAuthModule {
 	#[\Override]
 	public function auth(IRequest $request): ?IUser {
 		$authHeader = $request->getHeader('Authorization');
+		if (!\is_string($authHeader) || $authHeader === '') {
+			return null;
+		}
 
 		if (stripos($authHeader, 'bearer ') === 0) {
 			$bearerToken = \substr($authHeader, 7);

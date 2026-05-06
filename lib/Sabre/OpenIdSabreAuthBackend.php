@@ -117,7 +117,7 @@ class OpenIdSabreAuthBackend implements BackendInterface {
 	 * @codeCoverageIgnore
 	 */
 	protected function setupFilesystem(string $userId = ''): void {
-		\OC_Util::setupFS($userId);
+		\call_user_func(['OC_Util', 'setupFS'], $userId);
 	}
 
 	#[\Override]
