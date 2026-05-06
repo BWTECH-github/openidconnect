@@ -22,7 +22,7 @@
  */
 namespace OCA\OpenIdConnect;
 
-require_once __DIR__ . '/../vendor/autoload.php';
+require_once __DIR__ . '/bootstrap.php';
 
 use Jumbojett\OpenIDConnectClientException;
 use OC;
@@ -48,6 +48,14 @@ class Application extends App {
 	 */
 	public function boot(): void {
 		$server = $this->getContainer()->getServer();
+		$openIdConfig = getConfiguredOpenIdConnectSettings($server->getConfig());
+		if ($openIdConfig === null) {
+			return;
+		}
+
+		loadComposerDependencies();
+		assertComposerDependencies();
+
 		$memCacheFactory = $server->getMemCacheFactory();
 		if (!OC::$CLI && !$memCacheFactory->isAvailable()) {
 			throw new HintException('A real distributed mem cache setup is required');
@@ -56,11 +64,6 @@ class Application extends App {
 
 		/** @var Client $client */
 		$client = $server->query(Client::class);
-
-		$openIdConfig = $client->getOpenIdConfig();
-		if ($openIdConfig === null) {
-			return;
-		}
 		$session = $server->getSession();
 		$userSession = $server->getUserSession();
 		$urlGenerator = $server->getURLGenerator();

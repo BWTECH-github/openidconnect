@@ -27,7 +27,7 @@ return [
 		// openid config endpoint
 		['name' => 'loginFlow#config', 'url' => '/config', 'verb' => 'GET'],
 		// auth flow
-		['name' => 'loginFlow#login', 'url' => '/login', 'verb' => 'GET'],
+		['name' => 'loginFlow#login', 'url' => '/login', 'verb' => 'GET', 'postfix' => 'Start'],
 		['name' => 'loginFlow#login', 'url' => '/redirect', 'verb' => 'GET'],
 		// front channel logout url
 		['name' => 'loginFlow#logout', 'url' => '/logout', 'verb' => 'GET'],

@@ -25,7 +25,7 @@ This is a fork of the upstream `owncloud/openidconnect` app, modified by BW-Tech
     <namespace>OpenIdConnect</namespace>
     <category>integration</category>
     <documentation>
-      <admin>https://doc.owncloud.com/server/latest/admin_manual/configuration/user/oidc/index.html</admin>
+      <admin>https://doc.owncloud.com/server/latest/admin_manual/configuration/user/oidc/oidc.html</admin>
     </documentation>
     <website>https://bw.tech</website>
     <bugs>https://github.com/BWTECH-github/owncloud.online/issues</bugs>

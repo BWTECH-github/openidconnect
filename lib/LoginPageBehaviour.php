@@ -22,7 +22,6 @@
  */
 namespace OCA\OpenIdConnect;
 
-use OC_App;
 use OCP\IRequest;
 use OCP\IURLGenerator;
 use OCP\IUserSession;
@@ -81,7 +80,7 @@ class LoginPageBehaviour {
 	 * @codeCoverageIgnore
 	 */
 	public function registerAlternativeLogin(string $loginName): void {
-		OC_App::registerLogIn([
+		\call_user_func(['OC_App', 'registerLogIn'], [
 			'name' => $loginName,
 			'href' => $this->urlGenerator->linkToRoute('openidconnect.loginFlow.login', $this->request->getParams()),
 		]);

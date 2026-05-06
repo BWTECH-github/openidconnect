@@ -68,8 +68,8 @@ class ClientTest extends TestCase {
 	}
 
 	public function appConfigProvider(): \Generator {
-		yield 'invalid json' => ['from system config', '{[s', 'Loaded config from DB is not valid (malformed JSON); JSON Last Error: 4'];
-		yield 'empty app config' => ['from system config', ''];
+		yield 'invalid json' => [null, '{[s', 'Loaded config from DB is not valid (malformed JSON); JSON Last Error: 4'];
+		yield 'empty app config' => [null, ''];
 		yield 'empty array' => [[], '[]'];
 		yield 'json object' => [['foo' => 'bar'], '{"foo": "bar"}'];
 	}
@@ -89,9 +89,9 @@ class ClientTest extends TestCase {
 	}
 
 	public function testGetConfig(): void {
-		$this->config->expects(self::once())->method('getSystemValue')->willReturn('foo');
+		$this->config->expects(self::once())->method('getSystemValue')->willReturn(['foo' => 'bar']);
 		$return = $this->client->getOpenIdConfig();
-		self::assertEquals('foo', $return);
+		self::assertEquals(['foo' => 'bar'], $return);
 	}
 
 	/**
