@@ -31,5 +31,8 @@ return [
 		['name' => 'loginFlow#login', 'url' => '/redirect', 'verb' => 'GET'],
 		// front channel logout url
 		['name' => 'loginFlow#logout', 'url' => '/logout', 'verb' => 'GET'],
+		['name' => 'settings#getConfig', 'url' => '/settings/config', 'verb' => 'GET'],
+		['name' => 'settings#saveConfig', 'url' => '/settings/config', 'verb' => 'POST'],
+		['name' => 'settings#resetConfig', 'url' => '/settings/reset', 'verb' => 'POST'],
 	]
 ];

@@ -1,0 +1,90 @@
+/**
+ * Modified by BW-Tech GmbH for owncloud.online (PHP 8.4).
+ */
+#openidconnect-admin {
+	max-width: 1180px;
+}
+
+#openidconnect-admin fieldset {
+	margin: 0 0 22px;
+	padding: 0;
+	border: 0;
+}
+
+#openidconnect-admin legend {
+	margin-bottom: 12px;
+	font-size: 16px;
+	font-weight: 600;
+}
+
+#openidconnect-admin p {
+	margin: 0 0 12px;
+}
+
+#openidconnect-admin label {
+	display: block;
+	margin-bottom: 5px;
+	font-weight: 600;
+}
+
+#openidconnect-admin input[type="text"],
+#openidconnect-admin input[type="url"],
+#openidconnect-admin input[type="password"],
+#openidconnect-admin select,
+#openidconnect-admin textarea {
+	width: 100%;
+	max-width: 760px;
+	box-sizing: border-box;
+}
+
+#openidconnect-admin textarea {
+	min-height: 74px;
+	font-family: monospace;
+	resize: vertical;
+}
+
+#openidconnect-admin .checkbox-row {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+#openidconnect-admin .checkbox-row label {
+	display: inline;
+	margin: 0;
+	font-weight: normal;
+}
+
+#openidconnect-admin .openidconnect-config-source {
+	margin-bottom: 18px;
+}
+
+#openidconnect-admin .openidconnect-required-note {
+	margin-bottom: 18px;
+	color: #555;
+}
+
+#openidconnect-admin .openidconnect-required-marker {
+	color: #d40000;
+	font-weight: 700;
+}
+
+#openidconnect-admin input:required {
+	border-left: 3px solid #d40000;
+}
+
+#openidconnect-admin input:required:valid {
+	border-left-color: #46ba61;
+}
+
+#openidconnect-admin .openidconnect-actions {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-top: 18px;
+}
+
+#openidconnect-admin #openidconnect-raw-config {
+	max-width: 980px;
+	min-height: 300px;
+}
