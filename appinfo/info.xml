@@ -37,6 +37,12 @@ This is a fork of the upstream `owncloud/openidconnect` app, modified by BW-Tech
     <types>
         <authentication/>
     </types>
+    <settings>
+        <admin>OCA\OpenIdConnect\Settings\AdminPanel</admin>
+    </settings>
+    <settings-sections>
+        <admin>OCA\OpenIdConnect\Settings\AdminSection</admin>
+    </settings-sections>
     <auth-modules>
         <module>OCA\OpenIdConnect\OpenIdConnectAuthModule</module>
     </auth-modules>
