@@ -26,7 +26,9 @@
 			$message
 				.text(text)
 				.toggleClass('error', isError)
-				.toggleClass('success', !isError);
+				.toggleClass('success', !isError)
+				.attr('role', isError ? 'alert' : 'status')
+				.attr('aria-live', isError ? 'assertive' : 'polite');
 		}
 
 		function setBusy(isBusy) {
