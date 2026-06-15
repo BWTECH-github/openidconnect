@@ -175,7 +175,7 @@
 		<p class="openidconnect-actions">
 			<button type="submit" class="button primary" id="openidconnect-save"><?php p($l->t('Save')); ?></button>
 			<button type="button" class="button" id="openidconnect-reset-appconfig"><?php p($l->t('Use system config')); ?></button>
-			<span id="openidconnect-message" class="msg"></span>
+			<span id="openidconnect-message" class="msg" role="status" aria-live="polite"></span>
 		</p>
 
 		<fieldset>
