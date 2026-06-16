@@ -69,12 +69,18 @@
 	font-weight: 700;
 }
 
+/*
+ * Validitaetszustand wird nicht nur ueber die Farbe (rot/gruen),
+ * sondern zusaetzlich ueber Breite/Stil der linken Rahmenkante
+ * vermittelt (WCAG 1.4.1 Verwendung von Farbe). Die Farben erreichen
+ * jeweils >= 3:1 gegen den weissen Feldhintergrund (WCAG 1.4.11).
+ */
 #openidconnect-admin input:required {
-	border-left: 3px solid #d40000;
+	border-left: 3px dotted #d40000;
 }
 
 #openidconnect-admin input:required:valid {
-	border-left-color: #46ba61;
+	border-left: 6px solid #2c7a3f;
 }
 
 #openidconnect-admin .openidconnect-actions {
