@@ -4,7 +4,7 @@
     "description": "OpenId Connect app for ownCloud. Modified by BW-Tech GmbH for owncloud.online (PHP 8.4 fork of owncloud/openidconnect).",
     "require": {
         "php": ">=8.4",
-        "cweagans/composer-patches": "^1.7.3",
+        "cweagans/composer-patches": "^1.7.3 || ^2.0.0",
         "jumbojett/openid-connect-php": "^1.0.2",
         "phpseclib/phpseclib": "^3.0.36"
     },
