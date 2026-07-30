@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
+## [2.4.2] - 2026-07-31
+
+### Fixed
+- No longer bundles `phpseclib/phpseclib` (and its paragonie dependencies), which
+  the server already provides. A bundled `vendor/autoload.php` is prepended ahead
+  of the server's autoloader, so shipping a diverging phpseclib copy risked a
+  class-shadow conflict on a future server bump. The package is now declared via
+  `composer replace`, so `jumbojett/openid-connect-php` always uses the server's
+  phpseclib. Verified: RS256 JWT signature sign/verify works unchanged against the
+  server's phpseclib 3.0.55; the PHP 8.4 nullable-parameter patch still applies.
+
 ## [Unreleased] - XXXX-XX-XX
 
 ### Changed
