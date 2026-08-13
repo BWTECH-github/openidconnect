@@ -1,21 +1,21 @@
 # OpenID Connect for owncloud.online
 
-Authentication and SSO with OpenID Connect (OIDC) for ownCloud Server. This is a
-PHP 8.4 fork of [`owncloud/openidconnect`](https://github.com/owncloud/openidconnect)
+Authentication and SSO with OpenID Connect (OIDC) for owncloud.online Server. This is a
+PHP 8.4 fork of [`owncloud/openidconnect`](https://github.com/BWTECH-github/openidconnect)
 maintained by BW-Tech GmbH for [owncloud.online](https://github.com/BWTECH-github/owncloud.online).
 
 The app integrates an external Identity Provider (Keycloak, Kopano Konnect, Ping
-Federate, ADFS, Azure AD, etc.) into ownCloud as the primary login mechanism.
+Federate, ADFS, Azure AD, etc.) into owncloud.online as the primary login mechanism.
 
 ## Features
 
-- Login on the ownCloud web UI through an external OpenID Connect provider.
+- Login on the owncloud.online web UI through an external OpenID Connect provider.
 - Bearer-token authentication for desktop, mobile and Phoenix clients via the
   registered auth module.
 - WebDAV/Sabre Bearer / PoP token authentication.
 - Automatic provisioning of unknown users on first login (configurable).
 - Optional automatic update of email and display name on each login.
-- Optional automatic redirect from the ownCloud login page to the IdP.
+- Optional automatic redirect from the owncloud.online login page to the IdP.
 - Front-channel logout endpoint for IdP-initiated logout.
 - RFC 8693 token exchange before introspection (e.g., refresh-token → access-token).
 - Restriction of OIDC logins to specific user backends.
@@ -23,7 +23,7 @@ Federate, ADFS, Azure AD, etc.) into ownCloud as the primary login mechanism.
 
 ## Requirements
 
-- ownCloud Server 10.x (`<owncloud min-version="11">` in `info.xml`).
+- owncloud.online Server 10.x (`<owncloud min-version="11">` in `info.xml`).
 - PHP 8.4 or newer.
 - A working distributed memory cache (Redis, Memcached, APCu) - the app refuses
   to boot otherwise on non-CLI requests.
@@ -72,7 +72,7 @@ $CONFIG = [
 | `client-id` | string | OAuth2 client id registered with the IdP. |
 | `client-secret` | string | OAuth2 client secret. |
 | `scopes` | string[] | Scopes to request. Defaults to `['openid', 'profile', 'email']`. |
-| `mode` | string | `userid` (default) maps the IdP attribute to the ownCloud user id; `email` looks the user up by email. |
+| `mode` | string | `userid` (default) maps the IdP attribute to the owncloud.online user id; `email` looks the user up by email. |
 | `search-attribute` | string | Claim used to identify the user. Defaults to `email`. |
 | `loginButtonName` | string | Label of the alternative login button. |
 | `autoRedirectOnLoginPage` | bool | If `true`, the login page redirects to the IdP automatically. |
@@ -136,7 +136,7 @@ standard ones:
 - Desktop and mobile clients send the IdP's access token in the `Authorization`
   header (`Bearer ...` or `PoP ...`). The auth module verifies the token via
   signature or introspection, looks up / provisions the user and continues.
-- Logout from ownCloud calls `revokeToken` and `signOut` on the IdP. The
+- Logout from owncloud.online calls `revokeToken` and `signOut` on the IdP. The
   back-channel logout endpoint at `/apps/openidconnect/logout` accepts an `iss`
   / `sid` pair from the IdP and invalidates the cached session.
 
