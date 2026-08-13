@@ -4,11 +4,11 @@
     <name>OpenID Connect</name>
     <summary>Authentication and SSO with OpenID Connect (OIDC)</summary>
     <description>
-This extension adds support for [OpenID Connect](https://openid.net/connect/) to ownCloud Server.
+This extension adds support for [OpenID Connect](https://openid.net/connect/) to owncloud.online Server.
 
-OpenID Connect is an open standard for single sign-on and identity and access management. With ownCloud it can be used for user authentication and client authorization against an external Identity Provider.
+OpenID Connect is an open standard for single sign-on and identity and access management. With owncloud.online it can be used for user authentication and client authorization against an external Identity Provider.
 
-**Benefits of using ownCloud with OpenID Connect**
+**Benefits of using owncloud.online with OpenID Connect**
 
 - Increased security by shifting user authentication to an external Identity Provider
 - Seamless integration into single sign-on (SSO) environments as well as with third party products
@@ -16,7 +16,7 @@ OpenID Connect is an open standard for single sign-on and identity and access ma
 - Enterprise-grade security through the use of authentication security features (e.g., multi-factor authentication) and policies (e.g., automatic token expiration on certain conditions) provided by Identity Providers
 
 The integration requires an Identity Provider that supports OpenID Connect (e.g., Keycloak, Kopano Konnect, Ping Federate, ADFS, Azure AD or others).
-More information on setup, configuration and migration can be found in the ownCloud Documentation.
+More information on setup, configuration and migration can be found in the owncloud.online Documentation.
 
 This is a fork of the upstream `owncloud/openidconnect` app, modified by BW-Tech GmbH for owncloud.online and ported to PHP 8.4.</description>
     <licence>GPLv2</licence>
@@ -25,11 +25,11 @@ This is a fork of the upstream `owncloud/openidconnect` app, modified by BW-Tech
     <namespace>OpenIdConnect</namespace>
     <category>integration</category>
     <documentation>
-      <admin>https://doc.owncloud.com/server/latest/admin_manual/configuration/user/oidc/oidc.html</admin>
+      <admin>https://github.com/BWTECH-github/openidconnect#readme</admin>
     </documentation>
-    <website>https://bw.tech</website>
-    <bugs>https://github.com/BWTECH-github/owncloud.online/issues</bugs>
-    <repository type="git">https://github.com/BWTECH-github/owncloud.online.git</repository>
+    <website>https://owncloud.online</website>
+    <bugs>https://github.com/BWTECH-github/openidconnect/issues</bugs>
+    <repository type="git">https://github.com/BWTECH-github/openidconnect.git</repository>
     <dependencies>
         <owncloud min-version="11" max-version="11"/>
         <php min-version="8.4" />
