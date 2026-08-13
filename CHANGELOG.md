@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
+## [2.4.4] - 2026-08-13
+
+### Fixed
+
+- Paketbau nahm templates, js und css nicht mit. Die App registrierte damit
+  einen Verwaltungsbereich, dessen Aufruf mit einem Internal Server Error
+  endete, weil die Vorlage im Paket fehlte.
+
 ## [2.4.3] - 2026-08-13
 
 ### Changed

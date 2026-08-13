@@ -18,7 +18,11 @@ app_name=openidconnect
 build_dir=$(CURDIR)/build
 dist_dir=$(build_dir)/dist
 src_files=README.md LICENSE
-src_dirs=appinfo img l10n lib vendor
+# templates, js und css gehoeren ins Paket: AdminPanel::getPanel() laedt
+# js/admin.js und css/admin.css und gibt templates/admin.php zurueck. Fehlen
+# sie, registriert die App zwar einen Verwaltungsbereich, dessen Aufruf dann
+# aber mit einem Internal Server Error endet.
+src_dirs=appinfo css img js l10n lib templates vendor
 all_src=$(src_dirs) $(src_files)
 
 occ=$(CURDIR)/../../occ
