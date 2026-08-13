@@ -34,7 +34,7 @@ Federate, ADFS, Azure AD, etc.) into owncloud.online as the primary login mechan
 
 ```bash
 cd /path/to/owncloud/apps
-git clone https://github.com/BWTECH-github/owncloud.online.git
+git clone https://github.com/BWTECH-github/openidconnect.git
 cd openidconnect
 composer install --no-dev
 chown -R www-data:www-data .
