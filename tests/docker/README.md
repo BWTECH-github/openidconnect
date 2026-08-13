@@ -17,7 +17,7 @@ For Windows (`netsh interface ip add address "Loopback" 10.254.254.254 255.255.2
 
 ## Connecting a phoenix instance
 - A locally running Phoenix instance can connect to this setup with following config.json.
-It is required that phoenix is running on port 8300 - follow the [build instructions](https://github.com/owncloud/phoenix#building-phoenix) 
+It is required that phoenix is running on port 8300 - follow the [build instructions](https://github.com/BWTECH-github/phoenix#building-phoenix) 
 on how to get Phoenix started locally.
 
 ```json
