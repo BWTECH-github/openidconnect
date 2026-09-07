@@ -12,23 +12,30 @@
 		<strong id="openidconnect-config-source">-</strong>
 	</p>
 	<p class="openidconnect-required-note">
-		<span class="openidconnect-required-marker">*</span>
+		<?php /* Der Stern wird gemeinsam mit den Sternen an den Feldnamen ausgeblendet,
+		     damit die Zeichenerklärung nicht ins Leere zeigt. Der erklärende Satz
+		     bleibt vorlesbar. */ ?>
+		<span class="openidconnect-required-marker" aria-hidden="true">*</span>
 		<?php p($l->t('Required fields. The configuration is saved as app configuration and overrides config.php.')); ?>
 	</p>
 
 	<form id="openidconnect-admin-form">
 		<fieldset>
 			<legend><?php p($l->t('Identity Provider')); ?></legend>
+			<?php /* Der Stern hinter dem Feldnamen ist nur die sichtbare Wiederholung des
+			     Pflichtfeld-Zustands. Programmatisch tragen ihn die required-Attribute,
+			     deshalb bleibt das Zeichen per aria-hidden aus dem Barrierefreiheitsbaum:
+			     sonst hängt an jedem Feldnamen ein vorgelesenes "Stern". */ ?>
 			<p>
-				<label for="openidconnect-provider-url"><?php p($l->t('Provider URL')); ?> <span class="openidconnect-required-marker">*</span></label>
+				<label for="openidconnect-provider-url"><?php p($l->t('Provider URL')); ?> <span class="openidconnect-required-marker" aria-hidden="true">*</span></label>
 				<input type="url" id="openidconnect-provider-url" name="provider-url" required="required" placeholder="https://idp.example.com" />
 			</p>
 			<p>
-				<label for="openidconnect-client-id"><?php p($l->t('Client ID')); ?> <span class="openidconnect-required-marker">*</span></label>
+				<label for="openidconnect-client-id"><?php p($l->t('Client ID')); ?> <span class="openidconnect-required-marker" aria-hidden="true">*</span></label>
 				<input type="text" id="openidconnect-client-id" name="client-id" required="required" autocomplete="off" />
 			</p>
 			<p>
-				<label for="openidconnect-client-secret"><?php p($l->t('Client secret')); ?> <span class="openidconnect-required-marker">*</span></label>
+				<label for="openidconnect-client-secret"><?php p($l->t('Client secret')); ?> <span class="openidconnect-required-marker" aria-hidden="true">*</span></label>
 				<input type="password" id="openidconnect-client-secret" name="client-secret" required="required" autocomplete="new-password" />
 			</p>
 			<p>
@@ -179,8 +186,11 @@
 		</p>
 
 		<fieldset>
-			<legend><?php p($l->t('Generated app configuration')); ?></legend>
-			<textarea id="openidconnect-raw-config" readonly="readonly" rows="14"></textarea>
+			<legend id="openidconnect-raw-config-legend"><?php p($l->t('Generated app configuration')); ?></legend>
+			<?php /* Das Feld hat keine eigene sichtbare Beschriftung. Statt neuen Text zu
+			     erfinden, benennt es die bereits vorhandene Legende über aria-labelledby;
+			     eine Legende allein beschriftet ein Formularfeld nicht. */ ?>
+			<textarea id="openidconnect-raw-config" aria-labelledby="openidconnect-raw-config-legend" readonly="readonly" rows="14"></textarea>
 		</fieldset>
 	</form>
 </div>
