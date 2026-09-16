@@ -105,16 +105,18 @@ class LoginFlowController extends Controller {
 			$this->logger->logException($ex);
 			throw new HintException('Error in OpenIdConnect:' . $ex->getMessage());
 		}
+		// Never log raw tokens — a debug log otherwise becomes a store of live
+		// bearer/refresh credentials. Log only their presence.
 		$debugInfo = \json_encode([
-			'access_token' => $openid->getAccessToken(),
-			'refresh_token' => $openid->getRefreshToken(),
-			'id_token' => $openid->getIdToken(),
-			'access_token_payload' => $openid->getAccessTokenPayload(),
+			'has_access_token' => (string)$openid->getAccessToken() !== '',
+			'has_refresh_token' => (string)$openid->getRefreshToken() !== '',
+			'has_id_token' => (string)$openid->getIdToken() !== '',
 		], JSON_PRETTY_PRINT);
-		$this->logger->debug('LoginFlowController::login : Token info: ' . $debugInfo);
+		$this->logger->debug('LoginFlowController::login : token presence: ' . $debugInfo);
 
 		$userInfo = $openid->getUserInfo();
-		$this->logger->debug('User info: ' . \json_encode($userInfo));
+		// Log only the claim names, not their (personally identifiable) values.
+		$this->logger->debug('User info claims: ' . \json_encode($userInfo ? \array_keys((array)$userInfo) : []));
 		if (!$userInfo) {
 			throw new LoginException('No user information available.');
 		}
@@ -140,7 +142,7 @@ class LoginFlowController extends Controller {
 					->create('oca.openid-connect.sessions')
 					->set($sid, true);
 			} else {
-				$this->logger->debug('Id token holds no sid: ' . \json_encode($openid->getIdTokenPayload()));
+				$this->logger->debug('Id token holds no sid');
 			}
 			$response = new RedirectResponse($this->getDefaultUrl());
 			$openIdConfig = $openid->getOpenIdConfig();
@@ -169,24 +171,34 @@ class LoginFlowController extends Controller {
 			$this->logger->warning('OpenID::logout: OpenID is not properly configured');
 			return new Response();
 		}
-		// there is an active session -> logout
-		if ($this->userSession->isLoggedIn()) {
-			$user = $this->userSession->getUser() ? $this->userSession->getUser()->getUID() : '-unknown-user-';
-			$this->logger->debug("OpenID::logout: There is an active session -> performing logout for $user");
-			// complete logout
-			$this->userSession->logout();
-		} else {
-			if ($iss === null || $sid === null) {
-				$this->logger->warning("OpenID::logout: missing parameters: iss={$iss} and sid={$sid} and no active session");
-			}
-		}
+		// Front-channel logout is only legitimate when the IdP supplies iss + sid.
+		// A bare cookie-only request (e.g. a CSRF <img src=".../logout">) carries
+		// neither, and must NEVER terminate the user's active session. Validate the
+		// parameters BEFORE touching the session — the original order logged the user
+		// out first and validated afterwards, so any third-party page could force a
+		// logout.
 		if ($iss === null || $sid === null) {
+			$this->logger->warning("OpenID::logout: missing parameters: iss={$iss} and sid={$sid}");
 			return new Response();
 		}
 		if (isset($openIdConfig['provider-url'])) {
 			if (!Util::isSameDomain($openIdConfig['provider-url'], $iss)) {
 				$this->logger->warning("OpenID::logout: iss {$iss} !== provider-url {$openIdConfig['provider-url']}");
 				return new Response();
+			}
+		}
+
+		// Only terminate the active session when the sid actually matches the one
+		// stored for this session at login. Without this an attacker who knows the
+		// (public) issuer URL could still force a logout with an arbitrary sid.
+		if ($this->userSession->isLoggedIn()) {
+			$sessionSid = $this->session->get('oca.openid-connect.session-id');
+			if ($sessionSid !== null && \hash_equals((string)$sessionSid, (string)$sid)) {
+				$user = $this->userSession->getUser() ? $this->userSession->getUser()->getUID() : '-unknown-user-';
+				$this->logger->debug("OpenID::logout: sid match -> performing logout for $user");
+				$this->userSession->logout();
+			} else {
+				$this->logger->warning('OpenID::logout: sid does not match the active session; not terminating it');
 			}
 		}
 

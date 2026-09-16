@@ -81,7 +81,7 @@ class OpenIdConnectAuthModule implements IAuthModule {
 	 * @throws LoginException
 	 */
 	public function authToken(string $type, string $token): ?IUser {
-		$this->logger->debug("OpenIdConnectAuthModule::authToken $type $token");
+		$this->logger->debug("OpenIdConnectAuthModule::authToken type=$type");
 		try {
 			if ($this->client->getOpenIdConfig() === null) {
 				return null;
@@ -104,7 +104,7 @@ class OpenIdConnectAuthModule implements IAuthModule {
 				$this->updateCache($token, $user, $expiry);
 				return $user;
 			}
-			$this->logger->debug('OpenIdConnectAuthModule::authToken : no user retrieved from token ' . $token);
+			$this->logger->debug('OpenIdConnectAuthModule::authToken : no user retrieved from token');
 			return null;
 		} catch (OpenIDConnectClientException $ex) {
 			$this->logger->logException($ex);

@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
+## [2.4.5] - 2026-09-16
+
+### Security
+
+- Front-Channel-Logout beendet die Sitzung nur noch, wenn `iss` und `sid`
+  mitgeliefert werden und die `sid` zur bei der Anmeldung gespeicherten Sitzung
+  passt. Bisher wurde zuerst abgemeldet und danach geprüft, sodass jede fremde
+  Seite per `<img src=".../logout">` eine Abmeldung erzwingen konnte (CSRF).
+- Zugriffs-, Refresh- und ID-Tokens sowie die entschlüsselten Claims stehen
+  nicht mehr im Debug-Protokoll; protokolliert wird nur noch, ob ein Token
+  vorhanden ist, seine Ablaufzeit und die Namen der Claims.
+- Neuer Konfigurationsschalter `token-aud-check` (Standard: aus): erzwingt,
+  dass das `aud`-Feld des Zugriffstokens zur eigenen `client-id` passt. Aus,
+  weil manche IdPs (z. B. Keycloak) dort einen Ressourcennamen eintragen.
+  Diese Fixes liefen seit dem 03.07.2026 nur im SaaS-Bündel und fehlten hier
+  und im Marktplatz-Paket.
+
 ## [2.4.4] - 2026-08-13
 
 ### Fixed
