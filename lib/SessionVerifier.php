@@ -97,7 +97,7 @@ class SessionVerifier {
 	public function afterLogout($accessToken, $idToken): void {
 		// only call if access token is still valid
 		try {
-			$this->logger->debug('OIDC Logout: revoking token' . $accessToken);
+			$this->logger->debug('OIDC Logout: revoking access token');
 			$revokeData = $this->client->revokeToken($accessToken);
 			$this->logger->debug('Revocation info: ' . \json_encode($revokeData, JSON_THROW_ON_ERROR));
 		} catch (OpenIDConnectClientException $ex) {
@@ -107,7 +107,7 @@ class SessionVerifier {
 			$this->session->remove('oca.openid-connect.access-token');
 			$this->session->remove('oca.openid-connect.refresh-token');
 			$this->session->remove('oca.openid-connect.id-token');
-			$this->logger->debug('OIDC Logout: ending session ' . $accessToken . ' id: ' . $idToken);
+			$this->logger->debug('OIDC Logout: ending session');
 			$openIdConfig = $this->client->getOpenIdConfig();
 			$redirectUri = $openIdConfig['post_logout_redirect_uri'] ?? null;
 			$this->client->signOut($idToken, $redirectUri);

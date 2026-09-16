@@ -144,10 +144,28 @@ class Client extends OpenIDConnectClient {
 		$payload = $this->getAccessTokenPayload();
 		if ($payload) {
 			if (!$this->verifyJWTsignature($token)) {
-				$this->logger->error('Token cannot be verified: ' . $token);
+				// Do not log the raw token on failure.
+				$this->logger->error('Token cannot be verified');
 				throw new OpenIDConnectClientException('Token cannot be verified.');
 			}
-			$this->logger->debug('Access token payload: ' . \json_encode($payload, JSON_THROW_ON_ERROR));
+			// Optional audience binding. A token is accepted on signature alone; it is
+			// not verified that it was actually issued for *this* client, so a token
+			// minted for another client of the same IdP would pass. Enforcing `aud`
+			// closes that gap, but many IdPs (e.g. Keycloak) put a resource name rather
+			// than the client-id in `aud`, so a blanket check would reject valid tokens
+			// — gate it behind an explicit config flag (default off).
+			if (!empty($config['token-aud-check'])) {
+				$clientId = $config['client-id'] ?? null;
+				/* @phan-suppress-next-line PhanTypeExpectedObjectPropAccess */
+				$aud = $payload->aud ?? null;
+				$audOk = \is_array($aud) ? \in_array($clientId, $aud, true) : ($aud === $clientId);
+				if ($clientId === null || !$audOk) {
+					$this->logger->error('Access token audience does not match the configured client-id');
+					throw new OpenIDConnectClientException('Token audience mismatch.');
+				}
+			}
+			// Log only the expiry, never the decoded claims (they carry PII).
+			$this->logger->debug('Access token verified (exp: ' . ($payload->exp ?? 'n/a') . ')');
 			/* @phan-suppress-next-line PhanTypeExpectedObjectPropAccess */
 			return $payload->exp;
 		}

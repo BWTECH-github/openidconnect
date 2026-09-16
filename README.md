@@ -89,6 +89,7 @@ $CONFIG = [
 | `use-access-token-payload-for-user-info` | bool | Use the JWT payload instead of `userinfo`. |
 | `use-access-token-introspection-for-user-info` | bool | Use introspection results as the user-info source. |
 | `jwt-self-signed-jwk-header-supported` | bool | Allow self-signed JWK headers. |
+| `token-aud-check` | bool | If `true`, the `aud` claim of the access token must contain the configured `client-id`; tokens minted for another client of the same IdP are rejected. Off by default because some IdPs (for example Keycloak) put a resource name instead of the client id into `aud`. |
 | `ocis-routing-policy-claim` | string | User-info claim that drives the routing-policy cookie. |
 | `ocis-routing-policy-cookie` | string | Cookie name (default `owncloud-selector`). |
 | `ocis-routing-policy-cookie-directives` | string | Cookie directives (default `path=/;`). |
