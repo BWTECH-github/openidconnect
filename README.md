@@ -1,8 +1,9 @@
 # OpenID Connect for owncloud.online
 
 Authentication and SSO with OpenID Connect (OIDC) for owncloud.online Server. This is a
-PHP 8.4 fork of [`owncloud/openidconnect`](https://github.com/BWTECH-github/openidconnect)
-maintained by BW-Tech GmbH for [owncloud.online](https://github.com/BWTECH-github/owncloud.online).
+PHP 8.4 fork of the upstream `openidconnect` app, maintained by BW-Tech GmbH for
+[owncloud.online](https://github.com/BWTECH-github/owncloud.online) at
+[BWTECH-github/openidconnect](https://github.com/BWTECH-github/openidconnect).
 
 The app integrates an external Identity Provider (Keycloak, Kopano Konnect, Ping
 Federate, ADFS, Azure AD, etc.) into owncloud.online as the primary login mechanism.
@@ -56,7 +57,7 @@ configuration:
 $CONFIG = [
     'openid-connect' => [
         'provider-url'  => 'https://idp.example.com',
-        'client-id'     => 'owncloud',
+        'client-id'     => 'owncloud-online',
         'client-secret' => 'change-me',
         'loginButtonName' => 'Login via OpenID Connect',
         'mode'          => 'userid',          // or 'email'
@@ -107,7 +108,7 @@ $CONFIG = [
         'display-name-claim' => 'name',
         'picture-claim'      => 'picture',
         'provisioning-claim'     => 'roles',
-        'provisioning-attribute' => 'owncloud-user',
+        'provisioning-attribute' => 'owncloud-online-user',
         'update' => [
             'enabled' => true,   // sync e-mail and display name on each login
         ],
@@ -173,7 +174,7 @@ trace messages this app emits via the `OpenID` log context.
 
 ## Attribution
 
-Originally written by Thomas Müller and contributors at ownCloud GmbH and
-licensed under GPLv2. This fork is maintained by BW-Tech GmbH under the same
-licence; upstream history is preserved. Issues and pull requests for the fork
-go to <https://github.com/BWTECH-github/owncloud.online/issues>.
+Fork of an open-source app licensed under GPLv2; the original copyright notices
+are kept in the source files and the upstream history is preserved. This fork
+is maintained by BW-Tech GmbH under the same licence. Issues and pull requests
+go to <https://github.com/BWTECH-github/openidconnect/issues>.

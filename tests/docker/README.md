@@ -13,7 +13,7 @@ For Windows (`netsh interface ip add address "Loopback" 10.254.254.254 255.255.2
   - start `docker-compose -f tests/docker/docker-compose.yml up`
   - stop `docker-compose -f tests/docker/docker-compose.yml down -v`
 
-- ownCloud is running at [http://10.254.254.254:8080](http://10.254.254.254:8080)
+- The server is running at [http://10.254.254.254:8080](http://10.254.254.254:8080)
 
 ## Connecting a phoenix instance
 - A locally running Phoenix instance can connect to this setup with following config.json.

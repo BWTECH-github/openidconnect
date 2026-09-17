@@ -59,7 +59,7 @@ class OpenIdSabreAuthBackend implements BackendInterface {
 	 * This is required for WebDAV clients that resent the cookies even when the
 	 * account was changed.
 	 *
-	 * @see https://github.com/owncloud/core/issues/13245
+	 * @see Upstream core issue #13245
 	 */
 	private function isDavAuthenticated(string $username): bool {
 		return $this->session->get(self::DAV_AUTHENTICATED) !== null

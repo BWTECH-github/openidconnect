@@ -53,7 +53,7 @@ jobs:
           find appinfo lib templates tests -name '*.php' -print0 \
             | xargs -0 -n1 -P4 php -l
 
-      - name: Install owncloud-codestyle bin
+      - name: Install codestyle bin
         run: composer bin owncloud-codestyle install --no-progress --no-interaction --prefer-dist
 
       - name: Run php-cs-fixer (dry-run)
@@ -104,7 +104,7 @@ jobs:
         working-directory: server/apps/${{ env.APP_NAME }}
         run: composer install --no-progress --no-interaction --prefer-dist --no-dev
 
-      - name: Install ownCloud (sqlite)
+      - name: Install owncloud.online (sqlite)
         working-directory: server
         run: |
           mkdir -p data

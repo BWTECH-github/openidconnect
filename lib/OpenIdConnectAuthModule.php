@@ -36,7 +36,7 @@ use OCP\IUser;
 use OCP\IUserManager;
 
 /**
- * Used in case ownCloud acts as relying party.
+ * Used in case owncloud.online acts as relying party.
  * Mobile clients, desktop clients and phoenix will send an access token which
  * has been issued by the connected OpenID Connect Provider.
  */

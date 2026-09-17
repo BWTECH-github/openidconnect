@@ -18,9 +18,9 @@ OpenID Connect is an open standard for single sign-on and identity and access ma
 The integration requires an Identity Provider that supports OpenID Connect (e.g., Keycloak, Kopano Konnect, Ping Federate, ADFS, Azure AD or others).
 More information on setup, configuration and migration can be found in the owncloud.online Documentation.
 
-This is a fork of the upstream `owncloud/openidconnect` app, modified by BW-Tech GmbH for owncloud.online and ported to PHP 8.4.</description>
+This is a fork of the upstream `openidconnect` app, modified by BW-Tech GmbH for owncloud.online and ported to PHP 8.4.</description>
     <licence>GPLv2</licence>
-    <author>ownCloud GmbH, modified by BW-Tech GmbH</author>
+    <author>BW-Tech GmbH</author>
     <version>3.0.0</version>
     <namespace>OpenIdConnect</namespace>
     <category>integration</category>
