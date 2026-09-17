@@ -313,6 +313,28 @@ class Client extends OpenIDConnectClient {
 	}
 
 	/**
+	 * Modified by BW-Tech GmbH on 2026-09-17: the stored target is used once.
+	 * Without this a login flow that was abandoned at the provider left its
+	 * target in the session, and the next normal login (other tab, other
+	 * person on the same browser) landed there.
+	 */
+	public function clearRedirectUrl(): void {
+		$this->unsetSessionKey('openid_connect_redirect_url');
+	}
+
+	/**
+	 * Abmeldeadresse des Anbieters (end_session_endpoint), falls er eine nennt.
+	 */
+	public function getEndSessionEndpoint(): ?string {
+		try {
+			$endpoint = $this->getProviderConfigValue('end_session_endpoint', '');
+		} catch (\Throwable $e) {
+			return null;
+		}
+		return \is_string($endpoint) && $endpoint !== '' ? $endpoint : null;
+	}
+
+	/**
 	 * @codeCoverageIgnore
 	 */
 	#[\Override]

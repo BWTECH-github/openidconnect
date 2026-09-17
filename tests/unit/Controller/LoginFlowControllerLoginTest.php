@@ -29,9 +29,11 @@ use OC\User\LoginException;
 use OC\User\Session;
 use OCA\OpenIdConnect\Client;
 use OCA\OpenIdConnect\Controller\LoginFlowController;
+use OCA\OpenIdConnect\Service\AccountLoginException;
 use OCA\OpenIdConnect\Service\AutoProvisioningService;
 use OCA\OpenIdConnect\Service\UserLookupService;
 use OCP\AppFramework\Http\RedirectResponse;
+use OCP\AppFramework\Http\TemplateResponse;
 use OCP\ICacheFactory;
 use OCP\ILogger;
 use OCP\IRequest;
@@ -131,11 +133,97 @@ class LoginFlowControllerLoginTest extends TestCase {
 	public function testLoginUnknownUser(): void {
 		$this->client->method('getOpenIdConfig')->willReturn([]);
 		$this->client->method('getUserInfo')->willReturn((object)['email' => 'foo@exmaple.net']);
-		$this->userLookup->method('lookupUser')->willThrowException(new LoginException('User foo is not known.'));
-		$this->expectException(LoginException::class);
-		$this->expectExceptionMessage('User foo is not known.');
+		$this->userLookup->method('lookupUser')->willThrowException(new LoginException('User foo@exmaple.net is not known.'));
+		// Die Kennung aus der Ausnahme gehört nicht ins Protokoll.
+		$this->logger->expects(self::atLeastOnce())->method('warning')->with(self::logicalNot(self::stringContains('exmaple.net')));
+
+		$response = $this->controller->login();
+
+		self::assertInstanceOf(TemplateResponse::class, $response);
+		self::assertSame('login-failed', $response->getTemplateName());
+		self::assertSame('guest', $response->getRenderAs());
+		self::assertSame(403, $response->getStatus());
+		self::assertNotSame('', $response->getParams()['loginUrl']);
+		// Ohne Abmeldeadresse des Anbieters kein Abmeldeverweis.
+		self::assertSame('', $response->getParams()['providerLogoutUrl']);
+	}
+
+	/**
+	 * Leitet die Anmeldeseite sofort zum Anbieter weiter, führt der Rückweg im
+	 * Kreis - dann gibt es keinen.
+	 */
+	public function testLoginUnknownUserWithAutoRedirect(): void {
+		$this->client->method('getOpenIdConfig')->willReturn(['autoRedirectOnLoginPage' => true, 'loginButtonName' => 'Firmen-SSO']);
+		$this->client->method('getUserInfo')->willReturn((object)['email' => 'foo@exmaple.net']);
+		$this->userLookup->method('lookupUser')->willThrowException(new LoginException('User foo@exmaple.net is not known.'));
+
+		$response = $this->controller->login();
+
+		self::assertSame('', $response->getParams()['loginUrl']);
+	}
+
+	/**
+	 * Die Ursache steht im Protokoll, mit Konfigurationsnamen, aber ohne Wert
+	 * aus den Claims.
+	 */
+	public function testLoginWrongBackendLogsCauseWithoutIdentity(): void {
+		$this->client->method('getOpenIdConfig')->willReturn([]);
+		$this->client->method('getUserInfo')->willReturn((object)['email' => 'foo@exmaple.net']);
+		$this->userLookup->method('lookupUser')->willThrowException(new AccountLoginException(
+			'User is from wrong user backend <OC\User\Database>',
+			AccountLoginException::BACKEND_NOT_ALLOWED,
+			'OC\User\Database'
+		));
+		$warnungen = [];
+		$this->logger->method('warning')->willReturnCallback(function ($text) use (&$warnungen) {
+			$warnungen[] = $text;
+		});
 
 		$this->controller->login();
+
+		self::assertCount(1, $warnungen);
+		self::assertStringContainsString('allowed-user-backends', $warnungen[0]);
+		self::assertStringContainsString('OC\User\Database', $warnungen[0]);
+	}
+
+	public function testLoginUnknownAccountLogsNoIdentity(): void {
+		$this->client->method('getOpenIdConfig')->willReturn([]);
+		$this->client->method('getUserInfo')->willReturn((object)['email' => 'foo@exmaple.net']);
+		$this->userLookup->method('lookupUser')->willThrowException(new AccountLoginException(
+			'User with foo@exmaple.net is not known.',
+			AccountLoginException::ACCOUNT_UNKNOWN
+		));
+		$warnungen = [];
+		$this->logger->method('warning')->willReturnCallback(function ($text) use (&$warnungen) {
+			$warnungen[] = $text;
+		});
+
+		$this->controller->login();
+
+		self::assertStringContainsString('no account matches', $warnungen[0]);
+		self::assertStringNotContainsString('exmaple.net', $warnungen[0]);
+	}
+
+	/**
+	 * Nennt der Anbieter eine Abmeldeadresse, bietet die Seite sie an - mit
+	 * client_id und der konfigurierten Rücksprungadresse.
+	 */
+	public function testLoginUnknownUserOffersProviderLogout(): void {
+		$this->client->method('getOpenIdConfig')->willReturn([
+			'client-id' => 'owncloud',
+			'post_logout_redirect_uri' => 'https://cloud.example/index.php/login',
+		]);
+		$this->client->method('getEndSessionEndpoint')->willReturn('https://idp.example/session/end');
+		$this->client->method('getUserInfo')->willReturn((object)['email' => 'foo@exmaple.net']);
+		$this->userLookup->method('lookupUser')->willThrowException(new LoginException('x'));
+		$this->client->expects(self::atLeastOnce())->method('clearRedirectUrl');
+
+		$response = $this->controller->login();
+
+		self::assertSame(
+			'https://idp.example/session/end?client_id=owncloud&post_logout_redirect_uri=' . \rawurlencode('https://cloud.example/index.php/login'),
+			$response->getParams()['providerLogoutUrl']
+		);
 	}
 
 	public function testLoginCreateSessionFailed(): void {
@@ -167,7 +255,63 @@ class LoginFlowControllerLoginTest extends TestCase {
 
 		$response = $this->controller->login();
 
-		self::assertEquals('http://localhost/index.php/apps/files/', $response->getRedirectURL());
+		// Ohne angeforderte Seite die Startseite des Kerns - welche App das
+		// ist, entscheidet OC_Util::getDefaultPageUrl() (im Redesign dashboard).
+		self::assertEquals(\OC_Util::getDefaultPageUrl(), $response->getRedirectURL());
+	}
+
+	/**
+	 * Ein Ziel mit '@' zeigt nicht mehr auf diesen Server und wird verworfen.
+	 */
+	public function testLoginCreateSuccessWithForeignRedirect(): void {
+		$this->client->method('getOpenIdConfig')->willReturn([]);
+		$this->client->method('getUserInfo')->willReturn((object)['email' => 'foo@exmaple.net']);
+		$this->client->method('readRedirectUrl')->willReturn(':user@evil.example/path');
+		$user = $this->createMock(IUser::class);
+		$this->userLookup->method('lookupUser')->willReturn($user);
+		$this->userSession->method('createSessionToken')->willReturn(true);
+		$this->userSession->method('loginUser')->willReturn(true);
+
+		$response = $this->controller->login();
+
+		self::assertEquals(\OC_Util::getDefaultPageUrl(), $response->getRedirectURL());
+		self::assertStringNotContainsString('evil.example', $response->getRedirectURL());
+	}
+
+	/**
+	 * Ein kodierter Zeilenumbruch im Ziel ergab eine Weiterleitung ohne
+	 * Location (PHP verweigert den Header) - jetzt die Startseite.
+	 */
+	public function testLoginCreateSuccessWithControlCharacterRedirect(): void {
+		$this->client->method('getOpenIdConfig')->willReturn([]);
+		$this->client->method('getUserInfo')->willReturn((object)['email' => 'foo@exmaple.net']);
+		$this->client->method('readRedirectUrl')->willReturn('index.php/apps/files/%0d%0aX-Test: 1');
+		$user = $this->createMock(IUser::class);
+		$this->userLookup->method('lookupUser')->willReturn($user);
+		$this->userSession->method('createSessionToken')->willReturn(true);
+		$this->userSession->method('loginUser')->willReturn(true);
+
+		$response = $this->controller->login();
+
+		self::assertEquals(\OC_Util::getDefaultPageUrl(), $response->getRedirectURL());
+	}
+
+	/**
+	 * Das gespeicherte Ziel gilt einmal: nach dem Lesen wird es gelöscht, und
+	 * ein neuer Vorgang (ohne Antwort des Anbieters) beginnt ohne altes Ziel.
+	 */
+	public function testRedirectTargetIsClearedAtStartAndAfterUse(): void {
+		$this->client->method('getOpenIdConfig')->willReturn([]);
+		$this->client->method('getUserInfo')->willReturn((object)['email' => 'foo@exmaple.net']);
+		$this->client->method('readRedirectUrl')->willReturn('index.php/apps/files/');
+		$user = $this->createMock(IUser::class);
+		$this->userLookup->method('lookupUser')->willReturn($user);
+		$this->userSession->method('createSessionToken')->willReturn(true);
+		$this->userSession->method('loginUser')->willReturn(true);
+		// Kein code/error im Request: Start und Verbrauch löschen je einmal.
+		$this->client->expects(self::exactly(2))->method('clearRedirectUrl');
+
+		$this->controller->login();
 	}
 
 	public function testLoginCreateSuccessWithRedirect(): void {

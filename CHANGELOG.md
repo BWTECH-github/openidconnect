@@ -4,6 +4,63 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
+## [3.0.0] - 2026-09-17
+
+Durchgang für die Redesign-Oberfläche von owncloud.online 11.1, geprüft mit
+einem echten OpenID-Connect-Anbieter (oidc-provider): Anmeldung, Weiterleitung,
+Frontchannel-Abmeldung, Abmeldung über den Anbieter, Konto ohne Zuordnung,
+Verwaltungsseite. Läuft weiter ab owncloud.online 11.
+
+### Fixed
+
+- Nach der Anmeldung landete man immer auf der Startseite, auch wenn eine
+  andere Seite angefordert war (Dateilink, OAuth2-Freigabe eines Desktop- oder
+  Mobil-Clients). Der Redesign-Kern wertet `redirect_url` nicht mehr in
+  `OC_Util::getDefaultPageUrl()` aus; die App tut es jetzt selbst, mit derselben
+  Regel wie die Kernanmeldung (Ziele mit `@` werden verworfen). Zusätzlich
+  werden Ziele mit Steuerzeichen verworfen (ein kodierter Zeilenumbruch ergab
+  eine Weiterleitung ohne Location), und das gespeicherte Ziel gilt nur einmal:
+  ein beim Anbieter abgebrochener Vorgang bestimmte sonst das Ziel der nächsten
+  Anmeldung im selben Browser.
+- Gab es zur Identität des Anbieters kein nutzbares Konto, zeigte der Kern die
+  englische Rohmeldung („User with … is not known.“) auf einer Seite ohne
+  Rückweg. Jetzt eine übersetzte Seite (Status 403) mit Verweis zur Anmeldung
+  und, wenn der Anbieter eine Abmeldeadresse nennt, „Beim Anbieter abmelden“ -
+  sonst meldete er dasselbe Konto sofort wieder an. Im Protokoll steht die
+  Ursache (kein Konto, nicht eindeutig, Backend nicht erlaubt mit Klassenname,
+  Claim fehlt mit Claim-Name, Anlegen aus oder gescheitert), nie die Identität.
+- Die Verwaltungsseite war vollständig englisch. Alle 65 Texte in de, de_AT,
+  de_CH (du) und de_DE (Sie); Fehlermeldungen des Servers übersetzt und mit der
+  sichtbaren Feldbeschriftung.
+- „Speichern“ sah im Redesign wie ein Nebenknopf aus (weiße Pille). Jetzt der
+  Kartenbaustein `oco-btn-primary`, `primary` bleibt für ältere Kerne.
+- Die Herkunft der Konfiguration stand als interner Wert („empty“) da; nach
+  dem Öffnen blieb „Configuration loaded.“ stehen.
+- „Systemkonfiguration verwenden“ fragte über `window.confirm`; jetzt im
+  Dialog des Kerns mit den Knöpfen „Abbrechen“ und „App-Konfiguration
+  entfernen“. Nach Speichern und Zurücksetzen fiel der Tastaturfokus auf die
+  Seite, jetzt kehrt er zum Knopf zurück.
+- Die leere Auswahl beim Token-Austausch heißt „Kein Token-Austausch“.
+- Ohne eigene Beschriftung wurde „Login via OpenID Connect“ fest gespeichert;
+  ein leeres Feld bleibt jetzt leer, die Anmeldeseite zeigt „OpenID Connect“.
+- Abschnittstitel waren größer als der Kartentitel; Farben ohne Tokens;
+  wirkungslose `input:required`-Regeln entfernt.
+
+### Changed
+
+- Unit-Tests auf das seit 2.4.5 gültige, CSRF-sichere Abmeldeverhalten
+  umgestellt (vorher 5 von 118 rot) und ergänzt um Weiterleitung, fremde Ziele,
+  Steuerzeichen, einmalige Ziele, Fehlerseite, protokollierte Ursache und
+  sid-Prüfung (auch Sitzungen ohne gespeicherte sid): 128 Tests.
+- Zuordnungsfehler werfen `AccountLoginException` (Unterklasse von
+  `LoginException`) mit Ursachencode; die Meldungstexte sind unverändert.
+
+### Added
+
+- `tests/visual/`: Testanbieter `idp-probe.mjs`, Testdaten
+  `oidc-testdaten.sh`, Browser-Proben `pruefe-oidc-anmeldung.js` (23) und
+  `pruefe-oidc-verwaltung.js` (22).
+
 ## [2.4.5] - 2026-09-16
 
 ### Security

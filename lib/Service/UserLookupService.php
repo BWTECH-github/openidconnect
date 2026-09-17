@@ -47,8 +47,11 @@ class UserLookupService {
 		}
 		$searchByEmail = $this->client->mode() !== 'userid';
 		$attribute = $this->client->getIdentityClaim();
+		// Modified by BW-Tech GmbH on 2026-09-17: AccountLoginException carries
+		// a cause code (and configuration names) for the log, the message is
+		// unchanged.
 		if (!\property_exists($userInfo, $attribute)) {
-			throw new LoginException("Configured attribute $attribute is not known.");
+			throw new AccountLoginException("Configured attribute $attribute is not known.", AccountLoginException::CLAIM_MISSING, $attribute);
 		}
 
 		if ($searchByEmail) {
@@ -58,10 +61,10 @@ class UserLookupService {
 					return $this->autoProvisioningService->createUser($userInfo);
 				}
 
-				throw new LoginException("User with {$userInfo->$attribute} is not known.");
+				throw new AccountLoginException("User with {$userInfo->$attribute} is not known.", AccountLoginException::ACCOUNT_UNKNOWN);
 			}
 			if (\count($user) !== 1) {
-				throw new LoginException("{$userInfo->$attribute} is not unique.");
+				throw new AccountLoginException("{$userInfo->$attribute} is not unique.", AccountLoginException::ACCOUNT_NOT_UNIQUE);
 			}
 			$this->validUser($user[0]);
 			return $user[0];
@@ -71,7 +74,7 @@ class UserLookupService {
 			if ($this->autoProvisioningService->autoProvisioningEnabled()) {
 				return $this->autoProvisioningService->createUser($userInfo);
 			}
-			throw new LoginException("User {$userInfo->$attribute} is not known.");
+			throw new AccountLoginException("User {$userInfo->$attribute} is not known.", AccountLoginException::ACCOUNT_UNKNOWN);
 		}
 		$this->validUser($user);
 		return $user;
@@ -86,6 +89,6 @@ class UserLookupService {
 		if (\in_array($user->getBackendClassName(), $allowedUserBackEnds, true)) {
 			return;
 		}
-		throw new LoginException("User is from wrong user backend <{$user->getBackendClassName()}>");
+		throw new AccountLoginException("User is from wrong user backend <{$user->getBackendClassName()}>", AccountLoginException::BACKEND_NOT_ALLOWED, $user->getBackendClassName());
 	}
 }

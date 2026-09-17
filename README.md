@@ -23,7 +23,8 @@ Federate, ADFS, Azure AD, etc.) into owncloud.online as the primary login mechan
 
 ## Requirements
 
-- owncloud.online Server 10.x (`<owncloud min-version="11">` in `info.xml`).
+- owncloud.online 11 (`<owncloud min-version="11">` in `info.xml`); version 3.x
+  is the line for the owncloud.online 11.1 redesign and still runs on 11.0.
 - PHP 8.4 or newer.
 - A working distributed memory cache (Redis, Memcached, APCu) - the app refuses
   to boot otherwise on non-CLI requests.
@@ -133,7 +134,20 @@ standard ones:
 ## Daily usage
 
 - Users open `/login` and are either redirected to the IdP automatically (if
-  `autoRedirectOnLoginPage` is set) or click the configured login button.
+  `autoRedirectOnLoginPage` is set) or click the configured login button. An
+  empty `loginButtonName` shows "OpenID Connect".
+- After the IdP login users land on the page they originally requested
+  (`redirect_url`, e.g. a file link or an OAuth2 authorization of a client),
+  otherwise on the start page. Targets containing `@` are dropped, as in the
+  core login.
+- If the identity from the IdP matches no usable account (unknown user,
+  not unique, wrong user backend, auto provisioning off), users see a
+  translated page with a link back to the login page (no link when
+  `autoRedirectOnLoginPage` is set) and, if the IdP publishes an
+  `end_session_endpoint`, a link to sign out there (otherwise the IdP signs the
+  same account in again). The log names the cause without the identity, e.g.
+  `OpenID::login: the account belongs to a user backend that is not in
+  allowed-user-backends (OC\User\Database)`.
 - Desktop and mobile clients send the IdP's access token in the `Authorization`
   header (`Bearer ...` or `PoP ...`). The auth module verifies the token via
   signature or introspection, looks up / provisions the user and continues.
@@ -149,8 +163,8 @@ standard ones:
 | `Configuration issue in openidconnect app` thrown on login | `openid-connect` config missing or unreadable. | Verify `config:list system` output and provider URL. |
 | `Self signed JWK header is not valid` | IdP issues self-signed JWK headers. | Set `jwt-self-signed-jwk-header-supported => true` if you trust the IdP. |
 | `Token cannot be verified` | Signature check failed (clock skew, wrong issuer, stale JWKS). | Check IdP `jwks_uri` reachability and server time sync. |
-| `User <id> is not unique` | Several local users share the same e-mail in `mode=email`. | Switch to `mode=userid` or de-duplicate the affected accounts. |
-| `User is from wrong user backend` | `allowed-user-backends` excludes the user's backend. | Add the backend class name or remove the restriction. |
+| Page "The login with your external account did not work" | See the `OpenID::login:` warning in the log: `no account matches the identity` (create the account or enable auto provisioning), `several accounts match the identity` (de-duplicate e-mails or use `mode=userid`), `... not in allowed-user-backends (<class>)`, `the configured claim is missing in the user info (<claim>)` (fix `search-attribute`), `the claim or value required for auto provisioning is missing (<claim>)`, `creating the account failed`. | As named in the log line. |
+| Login ends on the start page instead of the requested page | owncloud.online 11.1 core with openidconnect older than 3.0.0 (the core no longer evaluates `redirect_url` for the default page). | Update to 3.0.0. |
 | Login loop on `/login` | `autoRedirectOnLoginPage` plus an IdP that bounces back without a session. | Disable `autoRedirectOnLoginPage` while debugging. |
 | Bearer auth fails on WebDAV | Token expired or `oca.openid-connect.2` cache stale. | Re-authenticate; clear the memcache namespace `oca.openid-connect.2`. |
 

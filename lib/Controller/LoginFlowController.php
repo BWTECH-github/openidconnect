@@ -30,12 +30,15 @@ use OC\User\Session;
 use OCA\OpenIdConnect\Client;
 use OCA\OpenIdConnect\Logger;
 use OCA\OpenIdConnect\OpenIdConnectAuthModule;
+use OCA\OpenIdConnect\Service\AccountLoginException;
 use OCA\OpenIdConnect\Service\AutoProvisioningService;
 use OCA\OpenIdConnect\Service\UserLookupService;
 use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\RedirectResponse;
 use OCP\AppFramework\Http\Response;
+use OCP\AppFramework\Http\TemplateResponse;
 use OCP\ICacheFactory;
 use OCP\ILogger;
 use OCP\IRequest;
@@ -91,7 +94,7 @@ class LoginFlowController extends Controller {
 	 * @throws HintException
 	 * @throws LoginException
 	 */
-	public function login(): RedirectResponse {
+	public function login(): Response {
 		$this->logger->debug('Entering LoginFlowController::login');
 		$openid = $this->getOpenIdConnectClient();
 		if (!$openid) {
@@ -99,6 +102,11 @@ class LoginFlowController extends Controller {
 		}
 		try {
 			$this->logger->debug('Before openid->authenticate');
+			// Ein neuer Anmeldevorgang (noch keine Antwort des Anbieters)
+			// beginnt ohne das Ziel eines früheren, abgebrochenen.
+			if ($this->request->getParam('code') === null && $this->request->getParam('error') === null) {
+				$openid->clearRedirectUrl();
+			}
 			$openid->storeRedirectUrl($this->request->getParam('redirect_url'));
 			$openid->authenticate();
 		} catch (OpenIDConnectClientException $ex) {
@@ -120,7 +128,20 @@ class LoginFlowController extends Controller {
 		if (!$userInfo) {
 			throw new LoginException('No user information available.');
 		}
-		$user = $this->userLookup->lookupUser($userInfo);
+		try {
+			$user = $this->userLookup->lookupUser($userInfo);
+		} catch (LoginException $ex) {
+			// Modified by BW-Tech GmbH on 2026-09-17: the core printed the raw
+			// English exception text on a page without a way back ("User with
+			// x is not known."). Now a translated page with a link to the login
+			// form. The exception text carries the identity (e-mail, user id) -
+			// like the claim values above it stays out of the log; the log gets
+			// the cause and configuration names instead.
+			$ursache = $ex instanceof AccountLoginException ? $ex->logText() : 'no usable account for the identity';
+			$this->logger->warning('OpenID::login: ' . $ursache);
+			$openid->clearRedirectUrl();
+			return $this->loginFailedResponse($openid);
+		}
 
 		if ($this->autoProvisioningService->autoUpdateEnabled()) {
 			$this->autoProvisioningService->updateAccountInfo($user, $userInfo);
@@ -216,16 +237,70 @@ class LoginFlowController extends Controller {
 		return $resp;
 	}
 
+	/**
+	 * Ziel nach der Anmeldung: die vor der Anmeldung angeforderte Seite, sonst
+	 * die Startseite.
+	 *
+	 * Modified by BW-Tech GmbH on 2026-09-17: the requested page is evaluated
+	 * here. The redesign core (owncloud.online 11.1) no longer reads
+	 * $_REQUEST['redirect_url'] in OC_Util::getDefaultPageUrl() - only the
+	 * core login controller does. Setting it and asking for the default page
+	 * therefore sent every OpenID Connect login to the start page, including
+	 * logins that began on an OAuth2 authorization of a desktop or mobile
+	 * client. Same rule as the core login: absolute URL on this server, targets
+	 * containing '@' are dropped (?redirect_url=:user@evil.example). Targets
+	 * with control characters are dropped as well: a decoded line break made
+	 * PHP refuse the Location header, and the user stood on an empty page.
+	 * The stored target is used once.
+	 */
 	protected function getDefaultUrl(): string {
 		$openid = $this->getOpenIdConnectClient();
+		$redirectUrl = $openid ? $openid->readRedirectUrl() : null;
 		if ($openid) {
-			$redirectUrl = $openid->readRedirectUrl();
-			if ($redirectUrl) {
-				$_REQUEST['redirect_url'] = $redirectUrl;
+			$openid->clearRedirectUrl();
+		}
+		if (\is_string($redirectUrl) && $redirectUrl !== '') {
+			$location = \OC::$server->getURLGenerator()->getAbsoluteURL(\urldecode($redirectUrl));
+			if (\strpos($location, '@') === false && !\preg_match('/[\x00-\x1f\x7f]/', $location)) {
+				return $location;
 			}
+			$this->logger->warning('OpenID::login: redirect target dropped, it points away from this server or contains control characters');
 		}
 
 		return \call_user_func(['OC_Util', 'getDefaultPageUrl']);
+	}
+
+	/**
+	 * Seite "Anmeldung hat nicht geklappt" in der Gastansicht, Status 403.
+	 *
+	 * Ohne Anbieternamen: das Feld loginButtonName ist die Beschriftung des
+	 * Knopfs ("Login via OpenID Connect", "Mit Firmenkonto anmelden") und
+	 * ergab im Satz Unsinn.
+	 *
+	 * Der Rückweg zur Anmeldung fehlt, wenn die Anmeldeseite sofort zum
+	 * Anbieter weiterleitet - dort ginge es nur im Kreis. Solange die Sitzung
+	 * beim Anbieter besteht, meldet er dasselbe Konto sofort wieder an; nennt
+	 * er eine Abmeldeadresse, bietet die Seite die Abmeldung dort an.
+	 */
+	private function loginFailedResponse(Client $openid): TemplateResponse {
+		$openIdConfig = $openid->getOpenIdConfig() ?? [];
+		$autoRedirect = (bool)($openIdConfig['autoRedirectOnLoginPage'] ?? false);
+		$providerLogoutUrl = '';
+		$endpoint = $openid->getEndSessionEndpoint();
+		if ($endpoint !== null) {
+			$params = ['client_id' => (string)($openIdConfig['client-id'] ?? '')];
+			$nachAbmeldung = (string)($openIdConfig['post_logout_redirect_uri'] ?? '');
+			if ($nachAbmeldung !== '') {
+				$params['post_logout_redirect_uri'] = $nachAbmeldung;
+			}
+			$providerLogoutUrl = $endpoint . (\strpos($endpoint, '?') === false ? '?' : '&') . \http_build_query($params);
+		}
+		$response = new TemplateResponse($this->appName, 'login-failed', [
+			'loginUrl' => $autoRedirect ? '' : \OC::$server->getURLGenerator()->linkToRoute('core.login.showLoginForm'),
+			'providerLogoutUrl' => $providerLogoutUrl,
+		], 'guest');
+		$response->setStatus(Http::STATUS_FORBIDDEN);
+		return $response;
 	}
 
 	private function getOpenIdConnectClient(): ?Client {

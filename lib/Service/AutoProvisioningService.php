@@ -57,13 +57,15 @@ class AutoProvisioningService {
 	 * @throws \Exception
 	 */
 	public function createUser($userInfo): IUser {
+		// Modified by BW-Tech GmbH on 2026-09-17: cause codes for the log, see
+		// AccountLoginException.
 		if (!$this->autoProvisioningEnabled()) {
-			throw new LoginException('Auto provisioning is disabled.');
+			throw new AccountLoginException('Auto provisioning is disabled.', AccountLoginException::PROVISIONING_DISABLED);
 		}
 		$attribute = $this->client->getIdentityClaim();
 		$emailOrUserId = $userInfo->$attribute ?? null;
 		if (!$emailOrUserId) {
-			throw new LoginException("Configured attribute $attribute is not known.");
+			throw new AccountLoginException("Configured attribute $attribute is not known.", AccountLoginException::CLAIM_MISSING, $attribute);
 		}
 		$userId = $this->client->mode() === 'email' ? $this->generateUserId() : $emailOrUserId;
 
@@ -74,17 +76,17 @@ class AutoProvisioningService {
 			$provisioningAttribute = $config['provisioning-attribute'] ?? null;
 
 			if (!\property_exists($userInfo, $provisioningClaim) || !\is_array($userInfo->$provisioningClaim)) {
-				throw new LoginException('Required provisioning attribute is not found.');
+				throw new AccountLoginException('Required provisioning attribute is not found.', AccountLoginException::PROVISIONING_CLAIM_MISSING, $provisioningClaim);
 			}
 
 			if (!\in_array($provisioningAttribute, $userInfo->$provisioningClaim, true)) {
-				throw new LoginException('Required provisioning attribute is not found.');
+				throw new AccountLoginException('Required provisioning attribute is not found.', AccountLoginException::PROVISIONING_CLAIM_MISSING, $provisioningClaim);
 			}
 		}
 
 		$user = $this->userManager->createUser($userId, $this->generatePassword());
 		if (!$user) {
-			throw new LoginException("Unable to create user $userId");
+			throw new AccountLoginException("Unable to create user $userId", AccountLoginException::ACCOUNT_CREATION_FAILED);
 		}
 		$user->setEnabled(true);
 

@@ -107,17 +107,57 @@ class LoginFlowControllerLogoutTest extends TestCase {
 
 	public function testLogoutNotLoggedIn(): void {
 		$this->client->method('getOpenIdConfig')->willReturn([]);
-		$this->logger->expects(self::once())->method('warning')->with('OpenID::logout: missing parameters: iss= and sid= and no active session');
+		$this->logger->expects(self::once())->method('warning')->with('OpenID::logout: missing parameters: iss= and sid=');
 
 		$this->controller->logout();
 	}
 
-	public function testLogoutWithSession(): void {
+	/**
+	 * Ohne iss und sid (etwa ein fremdes <img src=".../logout">) bleibt eine
+	 * aktive Sitzung bestehen - Schutz aus 2.4.5.
+	 */
+	public function testLogoutWithSessionButMissingParameters(): void {
 		$this->client->method('getOpenIdConfig')->willReturn([]);
 		$this->userSession->method('isLoggedIn')->willReturn(true);
-		$this->userSession->expects(self::once())->method('logout');
+		$this->userSession->expects(self::never())->method('logout');
 
 		$this->controller->logout();
+	}
+
+	public function testLogoutWithSessionAndMatchingSid(): void {
+		$this->client->method('getOpenIdConfig')->willReturn(['provider-url' => 'https://example.com']);
+		$this->memCacheFactory->method('create')->willReturn(new ArrayCache());
+		$this->userSession->method('isLoggedIn')->willReturn(true);
+		$this->session->method('get')->with('oca.openid-connect.session-id')->willReturn('SID-12345678');
+		$this->userSession->expects(self::once())->method('logout');
+
+		$this->controller->logout('https://example.com', 'SID-12345678');
+	}
+
+	/**
+	 * Sitzung ohne gespeicherte sid (Passwort-Anmeldung, ID-Token ohne sid):
+	 * weder eine leere noch eine beliebige sid darf sie beenden - sonst gälte
+	 * hash_equals('', '') und ein fremdes <img> meldete jeden ab.
+	 */
+	public function testLogoutWithSessionWithoutStoredSid(): void {
+		$this->client->method('getOpenIdConfig')->willReturn(['provider-url' => 'https://example.com']);
+		$this->memCacheFactory->method('create')->willReturn(new ArrayCache());
+		$this->userSession->method('isLoggedIn')->willReturn(true);
+		$this->session->method('get')->with('oca.openid-connect.session-id')->willReturn(null);
+		$this->userSession->expects(self::never())->method('logout');
+
+		$this->controller->logout('https://example.com', '');
+		$this->controller->logout('https://example.com', 'beliebig');
+	}
+
+	public function testLogoutWithSessionAndForeignSid(): void {
+		$this->client->method('getOpenIdConfig')->willReturn(['provider-url' => 'https://example.com']);
+		$this->memCacheFactory->method('create')->willReturn(new ArrayCache());
+		$this->userSession->method('isLoggedIn')->willReturn(true);
+		$this->session->method('get')->with('oca.openid-connect.session-id')->willReturn('SID-EIGEN');
+		$this->userSession->expects(self::never())->method('logout');
+
+		$this->controller->logout('https://example.com', 'SID-FREMD');
 	}
 
 	public function testLogoutInvalidIssuer(): void {

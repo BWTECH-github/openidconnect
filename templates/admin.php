@@ -2,6 +2,15 @@
 /**
  * Modified by BW-Tech GmbH for owncloud.online (PHP 8.4).
  *
+ * Modified by BW-Tech GmbH on 2026-09-17.
+ * Changes:
+ *   - save button uses the card building block of the redesign core
+ *     (oco-btn-primary); a plain button.primary inside a form became the white
+ *     secondary pill there. "primary" stays for older cores.
+ *   - configuration source is shown as readable, translated text (set by the
+ *     script), not as the internal value "empty"/"system"/"appconfig"
+ *   - the login button text field shows the text used when it stays empty
+ *
  * @license GPL-2.0
  */
 ?>
@@ -44,7 +53,8 @@
 			</p>
 			<p>
 				<label for="openidconnect-login-button-name"><?php p($l->t('Login button text')); ?></label>
-				<input type="text" id="openidconnect-login-button-name" name="loginButtonName" />
+				<?php /* Leer bleibt leer: dann nennt die Anmeldeseite den Anbieter "OpenID Connect". */ ?>
+				<input type="text" id="openidconnect-login-button-name" name="loginButtonName" placeholder="OpenID Connect" />
 			</p>
 		</fieldset>
 
@@ -132,7 +142,7 @@
 			<p>
 				<label for="openidconnect-exchange-token-mode-before-introspection"><?php p($l->t('Token exchange mode')); ?></label>
 				<select id="openidconnect-exchange-token-mode-before-introspection" name="exchange-token-mode-before-introspection">
-					<option value=""></option>
+					<option value=""><?php p($l->t('No token exchange')); ?></option>
 					<option value="access-token"><?php p($l->t('Access token')); ?></option>
 					<option value="refresh-token"><?php p($l->t('Refresh token')); ?></option>
 				</select>
@@ -180,7 +190,7 @@
 		</fieldset>
 
 		<p class="openidconnect-actions">
-			<button type="submit" class="button primary" id="openidconnect-save"><?php p($l->t('Save')); ?></button>
+			<button type="submit" class="button primary oco-btn-primary" id="openidconnect-save"><?php p($l->t('Save')); ?></button>
 			<button type="button" class="button" id="openidconnect-reset-appconfig"><?php p($l->t('Use system config')); ?></button>
 			<span id="openidconnect-message" class="msg" role="status" aria-live="polite"></span>
 		</p>

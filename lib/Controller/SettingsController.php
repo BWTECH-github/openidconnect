@@ -2,6 +2,12 @@
 /**
  * Modified by BW-Tech GmbH for owncloud.online (PHP 8.4).
  *
+ * Modified by BW-Tech GmbH on 2026-09-17.
+ * Changes:
+ *   - validation messages are translated (they reach the admin page as is)
+ *   - no hard-coded English login button text: an empty field stays empty,
+ *     the login page then shows "OpenID Connect"
+ *
  * @license GPL-2.0
  */
 
@@ -12,6 +18,7 @@ use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IConfig;
+use OCP\IL10N;
 use OCP\IRequest;
 
 class SettingsController extends Controller {
@@ -21,8 +28,16 @@ class SettingsController extends Controller {
 		$appName,
 		IRequest $request,
 		private readonly IConfig $config,
+		private ?IL10N $l10n = null,
 	) {
 		parent::__construct($appName, $request);
+	}
+
+	private function l10n(): IL10N {
+		if ($this->l10n === null) {
+			$this->l10n = \OC::$server->getL10N(Application::APPID);
+		}
+		return $this->l10n;
 	}
 
 	public function getConfig() {
@@ -96,7 +111,7 @@ class SettingsController extends Controller {
 			'scopes' => $this->listToText($config['scopes'] ?? ['openid', 'profile', 'email']),
 			'mode' => (string)($config['mode'] ?? 'userid'),
 			'search-attribute' => (string)($config['search-attribute'] ?? 'email'),
-			'loginButtonName' => (string)($config['loginButtonName'] ?? 'Login via OpenID Connect'),
+			'loginButtonName' => (string)($config['loginButtonName'] ?? ''),
 			'autoRedirectOnLoginPage' => (bool)($config['autoRedirectOnLoginPage'] ?? false),
 			'insecure' => (bool)($config['insecure'] ?? false),
 			'redirect-url' => (string)($config['redirect-url'] ?? ''),
@@ -127,13 +142,13 @@ class SettingsController extends Controller {
 	private function buildConfig(array $params): array {
 		$config = [];
 
-		$config['provider-url'] = $this->requiredString($params, 'provider-url', 'Provider URL is required');
-		$config['client-id'] = $this->requiredString($params, 'client-id', 'Client ID is required');
-		$config['client-secret'] = $this->requiredString($params, 'client-secret', 'Client secret is required');
+		$config['provider-url'] = $this->requiredString($params, 'provider-url', $this->l10n()->t('Provider URL is required'));
+		$config['client-id'] = $this->requiredString($params, 'client-id', $this->l10n()->t('Client ID is required'));
+		$config['client-secret'] = $this->requiredString($params, 'client-secret', $this->l10n()->t('Client secret is required'));
 		$config['scopes'] = $this->parseList((string)($params['scopes'] ?? 'openid profile email'));
 		$config['mode'] = ($params['mode'] ?? 'userid') === 'email' ? 'email' : 'userid';
 		$config['search-attribute'] = $this->string($params, 'search-attribute', 'email');
-		$config['loginButtonName'] = $this->string($params, 'loginButtonName', 'Login via OpenID Connect');
+		$this->setStringIfPresent($config, $params, 'loginButtonName');
 
 		$this->setBool($config, $params, 'autoRedirectOnLoginPage');
 		$this->setBool($config, $params, 'insecure');
@@ -212,9 +227,22 @@ class SettingsController extends Controller {
 			return;
 		}
 		if (!\in_array($value, $allowed, true)) {
-			throw new \InvalidArgumentException("Invalid value for $key");
+			throw new \InvalidArgumentException($this->l10n()->t('Invalid value for %s', [$this->fieldLabel($key)]));
 		}
 		$config[$key] = $value;
+	}
+
+	/**
+	 * Beschriftung des Felds, wie sie auf der Seite steht - die Meldung nennt
+	 * sonst den internen Schlüssel ("provider-params").
+	 */
+	private function fieldLabel(string $key): string {
+		return match ($key) {
+			'provider-params' => $this->l10n()->t('Provider params JSON'),
+			'auth-params' => $this->l10n()->t('Auth params JSON'),
+			'exchange-token-mode-before-introspection' => $this->l10n()->t('Token exchange mode'),
+			default => $key,
+		};
 	}
 
 	private function setJsonIfPresent(array &$config, array $params, string $key): void {
@@ -224,7 +252,7 @@ class SettingsController extends Controller {
 		}
 		$decoded = \json_decode($value, true);
 		if (\json_last_error() !== JSON_ERROR_NONE || !\is_array($decoded)) {
-			throw new \InvalidArgumentException("$key must be valid JSON object or array");
+			throw new \InvalidArgumentException($this->l10n()->t('%s must be a valid JSON object or array', [$this->fieldLabel($key)]));
 		}
 		$config[$key] = $decoded;
 	}
