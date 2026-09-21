@@ -213,7 +213,8 @@ class SessionVerifierTest extends TestCase {
 		$this->cacheFactory->expects(self::exactly(2))->method('create')->with('oca.openid-connect')->willReturn($cache);
 		$exp = \time() + 3600;
 		$this->client->method('verifyJWTsignature')->willReturn(true);
-		$this->client->method('getAccessTokenPayload')->willReturn((object)['exp' => $exp]);
+		$this->client->method('getOpenIdConfig')->willReturn(['client-id' => 'owncloud-client']);
+		$this->client->method('getAccessTokenPayload')->willReturn((object)['exp' => $exp, 'aud' => 'owncloud-client']);
 
 		$cache->expects(self::once())->method('set')->with('access-123456', $exp);
 		$this->userSession->expects(self::never())->method('logout');
@@ -235,7 +236,8 @@ class SessionVerifierTest extends TestCase {
 		$cache = $this->createMock(ICache::class);
 		$this->cacheFactory->expects(self::exactly(2))->method('create')->with('oca.openid-connect')->willReturn($cache);
 		$exp = \time() + 3600;
-		$this->client->method('introspectToken')->willReturn((object)['active' => true, 'exp' => $exp]);
+		$this->client->method('getOpenIdConfig')->willReturn(['client-id' => 'owncloud-client']);
+		$this->client->method('introspectToken')->willReturn((object)['active' => true, 'exp' => $exp, 'client_id' => 'owncloud-client']);
 
 		$cache->expects(self::once())->method('set')->with('access-123456', $exp);
 		$this->userSession->expects(self::never())->method('logout');

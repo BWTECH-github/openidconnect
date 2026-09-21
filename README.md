@@ -91,7 +91,7 @@ $CONFIG = [
 | `use-access-token-payload-for-user-info` | bool | Use the JWT payload instead of `userinfo`. |
 | `use-access-token-introspection-for-user-info` | bool | Use introspection results as the user-info source. |
 | `jwt-self-signed-jwk-header-supported` | bool | Allow self-signed JWK headers. |
-| `token-aud-check` | bool | If `true`, the `aud` claim of the access token must contain the configured `client-id`; tokens minted for another client of the same IdP are rejected. Off by default because some IdPs (for example Keycloak) put a resource name instead of the client id into `aud`. |
+| `token-aud-check` | bool | **On by default.** The access token must name this relying party, so a token the same issuer minted for another client is rejected (OC10-115, OC10-147). For a JWT that means the configured `client-id` has to appear in `aud`; for an opaque token the introspection response has to carry a matching `client_id` (RFC 7662 §2.2), with `aud` as the fallback — which is why an IdP that puts a resource name into `aud` (Keycloak writes `account`, Okta `api://default`) still works. Set to `false` only for an IdP that can neither be fixed nor name this instance: that reopens both findings. |
 | `ocis-routing-policy-claim` | string | User-info claim that drives the routing-policy cookie. |
 | `ocis-routing-policy-cookie` | string | Cookie name (default `owncloud-selector`). |
 | `ocis-routing-policy-cookie-directives` | string | Cookie directives (default `path=/;`). |

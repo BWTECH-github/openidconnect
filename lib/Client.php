@@ -148,21 +148,12 @@ class Client extends OpenIDConnectClient {
 				$this->logger->error('Token cannot be verified');
 				throw new OpenIDConnectClientException('Token cannot be verified.');
 			}
-			// Optional audience binding. A token is accepted on signature alone; it is
-			// not verified that it was actually issued for *this* client, so a token
-			// minted for another client of the same IdP would pass. Enforcing `aud`
-			// closes that gap, but many IdPs (e.g. Keycloak) put a resource name rather
-			// than the client-id in `aud`, so a blanket check would reject valid tokens
-			// — gate it behind an explicit config flag (default off).
-			if (!empty($config['token-aud-check'])) {
-				$clientId = $config['client-id'] ?? null;
-				/* @phan-suppress-next-line PhanTypeExpectedObjectPropAccess */
-				$aud = $payload->aud ?? null;
-				$audOk = \is_array($aud) ? \in_array($clientId, $aud, true) : ($aud === $clientId);
-				if ($clientId === null || !$audOk) {
-					$this->logger->error('Access token audience does not match the configured client-id');
-					throw new OpenIDConnectClientException('Token audience mismatch.');
-				}
+			// A signature alone does not say the token was issued for *this* client:
+			// a correctly signed, unexpired token minted by the same issuer for a
+			// different client would otherwise authenticate as the matching account,
+			// over bearer auth or the browser session (OC10-115).
+			if ($this->audienceCheckEnabled($config)) {
+				$this->verifyAudience($payload, $config['client-id'] ?? $this->getClientID());
 			}
 			// Log only the expiry, never the decoded claims (they carry PII).
 			$this->logger->debug('Access token verified (exp: ' . ($payload->exp ?? 'n/a') . ')');
@@ -195,7 +186,60 @@ class Client extends OpenIDConnectClient {
 			$this->logger->error('Token (as per introspection) is inactive: ' . \json_encode($introData, JSON_THROW_ON_ERROR));
 			throw new OpenIDConnectClientException('Token (as per introspection) is inactive');
 		}
+		// Same gap as OC10-115, on the other branch: an opaque token minted by the
+		// same issuer for a different client is reported active here, so "active"
+		// alone authenticated its subject — unauthenticated, via the Authorization
+		// header (OC10-147).
+		//
+		// RFC 7662 §2.2 defines "client_id" as the client the token was issued to,
+		// which is exactly the claim that answers this. Unlike RFC 7519, RFC 7662
+		// makes "aud" optional and providers commonly use it for the resource
+		// server rather than the client (Keycloak emits "account", Okta
+		// "api://default"), so the audience claim is only the fallback. Still fails
+		// closed: if neither names us, verifyAudience() throws.
+		if ($this->audienceCheckEnabled($config)) {
+			$clientId = $config['client-id'] ?? $this->getClientID();
+			if ($clientId === null || ($introData->client_id ?? null) !== $clientId) {
+				$this->verifyAudience($introData, $clientId);
+			}
+		}
 		return $introData->exp;
+	}
+
+	/**
+	 * Whether the audience of an access token is bound to the configured
+	 * client-id. On by default — leaving it off is what OC10-115 and OC10-147
+	 * are. `token-aud-check => false` is the escape hatch for an identity
+	 * provider that can neither be fixed nor name this relying party, and it
+	 * reopens both findings; it exists so that such an installation degrades to
+	 * the old behaviour instead of losing every login on upgrade.
+	 *
+	 * @param array $config
+	 */
+	private function audienceCheckEnabled(array $config): bool {
+		return ($config['token-aud-check'] ?? true) !== false;
+	}
+
+	/**
+	 * Ensures the token was issued for this relying party by asserting that the
+	 * configured client-id is present in the token's "aud" (audience) claim.
+	 * The claim may be a single string or an array of strings per RFC 7519 and
+	 * RFC 7662.
+	 *
+	 * @param object $payload the decoded access token payload or the
+	 *                        introspection response
+	 * @param string|null $clientId the configured relying party client-id
+	 * @throws OpenIDConnectClientException if the audience does not match
+	 */
+	private function verifyAudience(object $payload, ?string $clientId): void {
+		$audience = $payload->aud ?? null;
+		$audiences = \is_array($audience) ? $audience : [$audience];
+		if ($clientId === null || !\in_array($clientId, $audiences, true)) {
+			// The audience is claim data, not a secret, and naming it is what
+			// makes a misconfigured identity provider diagnosable.
+			$this->logger->error('Token audience does not match the configured client-id: ' . \json_encode($audience));
+			throw new OpenIDConnectClientException('Token audience does not match the configured client-id');
+		}
 	}
 
 	#[\Override]
