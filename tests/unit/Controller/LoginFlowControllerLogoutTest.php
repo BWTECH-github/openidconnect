@@ -107,17 +107,37 @@ class LoginFlowControllerLogoutTest extends TestCase {
 
 	public function testLogoutNotLoggedIn(): void {
 		$this->client->method('getOpenIdConfig')->willReturn([]);
-		$this->logger->expects(self::once())->method('warning')->with('OpenID::logout: missing parameters: iss= and sid= and no active session');
+		$this->logger->expects(self::once())->method('warning')->with('OpenID::logout: missing parameters: iss= and sid=');
 
 		$this->controller->logout();
 	}
 
-	public function testLogoutWithSession(): void {
+	/**
+	 * Front-channel logout without iss and sid is a bare cookie-only request —
+	 * exactly what a third-party page can forge with <img src=".../logout">.
+	 * It must never terminate the session, however logged in the user is.
+	 */
+	public function testLogoutWithSessionButWithoutParametersDoesNotLogOut(): void {
 		$this->client->method('getOpenIdConfig')->willReturn([]);
 		$this->userSession->method('isLoggedIn')->willReturn(true);
-		$this->userSession->expects(self::once())->method('logout');
+		$this->userSession->expects(self::never())->method('logout');
+		$this->logger->expects(self::once())->method('warning')->with('OpenID::logout: missing parameters: iss= and sid=');
 
 		$this->controller->logout();
+	}
+
+	/**
+	 * And the sid has to be the one stored at login: knowing the (public)
+	 * issuer URL must not be enough to force a logout with an arbitrary sid.
+	 */
+	public function testLogoutWithForeignSidDoesNotLogOut(): void {
+		$this->client->method('getOpenIdConfig')->willReturn(['provider-url' => 'https://example.com']);
+		$this->userSession->method('isLoggedIn')->willReturn(true);
+		$this->session->method('get')->with('oca.openid-connect.session-id')->willReturn('SID-THE-REAL-ONE');
+		$this->memCacheFactory->method('create')->willReturn(new ArrayCache());
+		$this->userSession->expects(self::never())->method('logout');
+
+		$this->controller->logout('https://example.com', 'SID-ATTACKER-GUESS');
 	}
 
 	public function testLogoutInvalidIssuer(): void {

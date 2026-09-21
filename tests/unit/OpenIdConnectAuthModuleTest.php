@@ -167,8 +167,8 @@ class OpenIdConnectAuthModuleTest extends TestCase {
 	 * @throws LoginException
 	 */
 	public function testValidTokenWithIntrospection(): void {
-		$this->client->method('getOpenIdConfig')->willReturn([]);
-		$this->client->method('introspectToken')->willReturn((object)['active' => true, 'exp' => \time() + 3600]);
+		$this->client->method('getOpenIdConfig')->willReturn(['client-id' => 'owncloud-client']);
+		$this->client->method('introspectToken')->willReturn((object)['active' => true, 'exp' => \time() + 3600, 'client_id' => 'owncloud-client']);
 		$this->client->method('getUserInfo')->willReturn((object)['email' => 'foo@example.com']);
 		$this->cacheFactory->method('create')->willReturn(new ArrayCache());
 		$user = $this->createMock(IUser::class);
@@ -184,9 +184,9 @@ class OpenIdConnectAuthModuleTest extends TestCase {
 	 * @throws LoginException
 	 */
 	public function testValidTokenWithJWT(): void {
-		$this->client->method('getOpenIdConfig')->willReturn([]);
+		$this->client->method('getOpenIdConfig')->willReturn(['client-id' => 'owncloud-client']);
 		$this->client->method('verifyJWTsignature')->willReturn(true);
-		$this->client->method('getAccessTokenPayload')->willReturn((object)['exp' => \time() + 3600]);
+		$this->client->method('getAccessTokenPayload')->willReturn((object)['exp' => \time() + 3600, 'aud' => 'owncloud-client']);
 		$this->client->method('getUserInfo')->willReturn((object)['email' => 'foo@example.com']);
 		$this->cacheFactory->method('create')->willReturn(new ArrayCache());
 		$user = $this->createMock(IUser::class);
@@ -218,12 +218,12 @@ class OpenIdConnectAuthModuleTest extends TestCase {
 	 */
 	public function testValidTokenWithAutoUpdate(): void {
 		$userInfo = (object)['email' => 'foo@example.com'];
-		$openIdConfig = ['auto-provision' => [ 'update' => ['enabled' => true ]]];
+		$openIdConfig = ['client-id' => 'owncloud-client', 'auto-provision' => [ 'update' => ['enabled' => true ]]];
 		$this->client->method('getOpenIdConfig')->willReturn($openIdConfig);
 		$this->client->method('getAutoProvisionConfig')->willReturn($openIdConfig['auto-provision']);
 		$this->client->method('getUserInfo')->willReturn($userInfo);
 		$this->client->method('verifyJWTsignature')->willReturn(true);
-		$this->client->method('getAccessTokenPayload')->willReturn((object)['exp' => time() + 100]);
+		$this->client->method('getAccessTokenPayload')->willReturn((object)['exp' => time() + 100, 'aud' => 'owncloud-client']);
 		$this->autoProvisioningService->method('autoUpdateEnabled')->willReturn(true);
 		$this->cacheFactory->method('create')->willReturn(new ArrayCache());
 

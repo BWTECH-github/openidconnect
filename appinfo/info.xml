@@ -21,7 +21,7 @@ More information on setup, configuration and migration can be found in the owncl
 This is a fork of the upstream `owncloud/openidconnect` app, modified by BW-Tech GmbH for owncloud.online and ported to PHP 8.4.</description>
     <licence>GPLv2</licence>
     <author>ownCloud GmbH, modified by BW-Tech GmbH</author>
-    <version>2.4.5</version>
+    <version>2.4.6</version>
     <namespace>OpenIdConnect</namespace>
     <category>integration</category>
     <documentation>

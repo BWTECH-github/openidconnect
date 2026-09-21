@@ -4,6 +4,58 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
+## [2.4.6] - 2026-09-21
+
+### Security
+
+- **Das Publikum des Zugriffstokens wird jetzt standardmäßig geprüft.** Ein
+  korrekt signiertes, nicht abgelaufenes Token, das derselbe Herausgeber für
+  einen *anderen* Client ausgestellt hat, wurde bisher akzeptiert und meldete
+  als das zugehörige Konto an — über Bearer-Auth (API, WebDAV) wie über die
+  Browser-Sitzung. Upstream führt das als **OC10-115**.
+
+  In 2.4.5 gab es dafür bereits den Schalter `token-aud-check`, er war aber
+  **standardmäßig aus**: der Befund war also auf jeder Installation offen, die
+  ihn nicht ausdrücklich eingeschaltet hatte. Die Prüfung ist jetzt an, sofern
+  sie nicht ausdrücklich abgeschaltet wird.
+
+- **Undurchsichtige Tokens (Introspection) wurden überhaupt nicht geprüft.**
+  `verifyToken()` hat zwei Zweige: JWTs werden aus der entschlüsselten Nutzlast
+  geprüft, alles andere geht an die Token-Introspection nach RFC 7662. Der
+  `aud`-Vergleich hing nur am JWT-Zweig; der Introspection-Zweig prüfte nichts
+  außer `error` und `active`. Ein undurchsichtiges Token, das derselbe
+  Herausgeber für einen anderen Client ausgestellt hat, gilt dort als `active`
+  und wurde angenommen — **unauthentifiziert erreichbar über den
+  Authorization-Header**. Upstream führt das als **OC10-147**.
+
+  Der Introspection-Zweig vergleicht jetzt zuerst `client_id` (RFC 7662 §2.2 —
+  der Client, für den das Token ausgestellt wurde) und fällt erst dann auf
+  `aud` zurück. Das ist der Grund, warum die Prüfung hier keine funktionierenden
+  Installationen zerlegt: Keycloak trägt in `aud` „account" ein, Okta
+  „api://default", Ory Hydra ein leeres Feld — `client_id` benennt dagegen
+  genau uns. Benennt keines von beiden diese Instanz, wird abgewiesen.
+
+### Changed
+
+- `token-aud-check` ist von einem Einschalter zu einem **Ausschalter** geworden:
+  Standard `true`, und `false` stellt das alte Verhalten wieder her. Das öffnet
+  OC10-115 und OC10-147 erneut und steht nur bereit, damit eine Installation mit
+  einem Identitätssystem, das sich weder richten lässt noch diese Instanz
+  benennt, beim Update nicht jede Anmeldung verliert.
+
+  **Beim Update zu beachten:** Trägt das Identitätssystem in `aud` des
+  JWT-Zugriffstokens etwas anderes als die `client-id`, melden sich Nutzer nach
+  dem Update nicht mehr an. Vorher prüfen, im Zweifel `token-aud-check` auf
+  `false` setzen und das Identitätssystem nachziehen.
+
+### Fixed
+
+- Zwei Tests im Bereich des Logout-CSRF-Fixes waren seit 2.4.5 rot: Sie haben
+  noch den alten Wortlaut der Protokollmeldung erwartet und verlangt, dass ohne
+  `iss`/`sid` abgemeldet wird — also genau das Verhalten, das der Fix beseitigt.
+  Sie prüfen jetzt das korrigierte Verhalten, und ein neuer Test hält fest, dass
+  eine fremde `sid` keine Abmeldung auslöst.
+
 ## [2.4.5] - 2026-09-16
 
 ### Security

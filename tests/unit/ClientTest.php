@@ -237,4 +237,252 @@ class ClientTest extends TestCase {
 			'preferred_username' => 'alice@example.net'
 		], $info);
 	}
+
+	public function providesAudienceData(): array {
+		return [
+			'aud string matches client-id' => ['owncloud-client', true],
+			'aud array contains client-id' => [['owncloud-client', 'client-a'], true],
+			'aud string is another client' => ['client-a', false],
+			'aud array without client-id' => [['client-a', 'client-b'], false],
+			'aud missing' => [null, false],
+		];
+	}
+
+	/**
+	 * @dataProvider providesAudienceData
+	 * @param string|array|null $aud
+	 * @param bool $expectValid
+	 * @throws JsonException
+	 * @throws OpenIDConnectClientException
+	 */
+	public function testVerifyTokenAudience($aud, bool $expectValid): void {
+		$this->config->method('getSystemValue')->willReturnCallback(static function ($key) {
+			if ($key === 'openid-connect') {
+				return [
+					'provider-url' => 'https://example.net',
+					'client-id' => 'owncloud-client',
+					'client-secret' => 'secret',
+				];
+			}
+			return null;
+		});
+
+		$payload = ['exp' => \time() + 3600];
+		if ($aud !== null) {
+			$payload['aud'] = $aud;
+		}
+
+		$this->client = $this->getMockBuilder(Client::class)
+			->setConstructorArgs([$this->config, $this->urlGenerator, $this->session, $this->logger, $this->clientService])
+			->onlyMethods(['getAccessTokenPayload', 'verifyJWTsignature', 'setAccessToken'])
+			->getMock();
+		$this->client->method('setAccessToken');
+		$this->client->method('getAccessTokenPayload')->willReturn((object)$payload);
+		$this->client->method('verifyJWTsignature')->willReturn(true);
+
+		if (!$expectValid) {
+			$this->expectException(OpenIDConnectClientException::class);
+			$this->expectExceptionMessage('Token audience does not match the configured client-id');
+		}
+
+		$exp = $this->client->verifyToken('some-token');
+
+		if ($expectValid) {
+			self::assertEquals($payload['exp'], $exp);
+		}
+	}
+
+	/**
+	 * @dataProvider providesAudienceData
+	 * @param string|array|null $aud
+	 * @param bool $expectValid
+	 * @throws JsonException
+	 * @throws OpenIDConnectClientException
+	 */
+	public function testVerifyTokenIntrospectionAudience($aud, bool $expectValid): void {
+		$this->config->method('getSystemValue')->willReturnCallback(static function ($key) {
+			if ($key === 'openid-connect') {
+				return [
+					'provider-url' => 'https://example.net',
+					'client-id' => 'owncloud-client',
+					'client-secret' => 'secret',
+				];
+			}
+			return null;
+		});
+
+		$introspectionData = ['active' => true, 'exp' => \time() + 3600];
+		if ($aud !== null) {
+			$introspectionData['aud'] = $aud;
+		}
+
+		$this->client = $this->getMockBuilder(Client::class)
+			->setConstructorArgs([$this->config, $this->urlGenerator, $this->session, $this->logger, $this->clientService])
+			->onlyMethods(['getAccessTokenPayload', 'setAccessToken', 'introspectToken'])
+			->getMock();
+		$this->client->method('setAccessToken');
+		// an opaque token has no JWT payload - this is what forces the
+		// introspection branch of verifyToken
+		$this->client->method('getAccessTokenPayload')->willReturn(null);
+		$this->client->method('introspectToken')->willReturn((object)$introspectionData);
+
+		if (!$expectValid) {
+			$this->expectException(OpenIDConnectClientException::class);
+			$this->expectExceptionMessage('Token audience does not match the configured client-id');
+		}
+
+		$exp = $this->client->verifyToken('opaque-token');
+
+		if ($expectValid) {
+			self::assertEquals($introspectionData['exp'], $exp);
+		}
+	}
+
+	public function providesIntrospectionClientIdData(): array {
+		return [
+			// "client_id" is the claim which actually answers "was this token
+			// issued to us", so a match is enough on its own
+			'client_id matches, aud absent' => ['owncloud-client', 'owncloud-client', null, true],
+			'client_id matches, aud names the resource server' => ['owncloud-client', 'owncloud-client', 'account', true],
+			// a foreign client_id falls through to the audience claim
+			'client_id is another client, aud absent' => ['owncloud-client', 'client-a', null, false],
+			'client_id is another client, aud contains client-id' => ['owncloud-client', 'client-a', ['owncloud-client', 'client-a'], true],
+			// with no client-id configured neither claim can name us
+			'no client-id configured, no claim names us' => [null, null, null, false],
+		];
+	}
+
+	/**
+	 * The introspection branch prefers the "client_id" of RFC 7662 §2.2 over the
+	 * optional "aud" claim, which providers commonly use to name the resource
+	 * server rather than the relying party (OC10-147).
+	 *
+	 * @dataProvider providesIntrospectionClientIdData
+	 * @param string|null $configuredClientId
+	 * @param string|null $introspectedClientId
+	 * @param string|array|null $aud
+	 * @param bool $expectValid
+	 * @throws JsonException
+	 * @throws OpenIDConnectClientException
+	 */
+	public function testVerifyTokenIntrospectionClientId(
+		?string $configuredClientId,
+		?string $introspectedClientId,
+		$aud,
+		bool $expectValid
+	): void {
+		$this->config->method('getSystemValue')->willReturnCallback(static function ($key) use ($configuredClientId) {
+			if ($key === 'openid-connect') {
+				return [
+					'provider-url' => 'https://example.net',
+					'client-id' => $configuredClientId,
+					'client-secret' => 'secret',
+				];
+			}
+			return null;
+		});
+
+		$introspectionData = ['active' => true, 'exp' => \time() + 3600];
+		if ($introspectedClientId !== null) {
+			$introspectionData['client_id'] = $introspectedClientId;
+		}
+		if ($aud !== null) {
+			$introspectionData['aud'] = $aud;
+		}
+
+		$this->client = $this->getMockBuilder(Client::class)
+			->setConstructorArgs([$this->config, $this->urlGenerator, $this->session, $this->logger, $this->clientService])
+			->onlyMethods(['getAccessTokenPayload', 'setAccessToken', 'introspectToken'])
+			->getMock();
+		$this->client->method('setAccessToken');
+		// an opaque token has no JWT payload - this is what forces the
+		// introspection branch of verifyToken
+		$this->client->method('getAccessTokenPayload')->willReturn(null);
+		$this->client->method('introspectToken')->willReturn((object)$introspectionData);
+
+		if (!$expectValid) {
+			$this->expectException(OpenIDConnectClientException::class);
+			$this->expectExceptionMessage('Token audience does not match the configured client-id');
+		}
+
+		$exp = $this->client->verifyToken('opaque-token');
+
+		if ($expectValid) {
+			self::assertEquals($introspectionData['exp'], $exp);
+		}
+	}
+
+	/**
+	 * Der Ausweg fuer ein Identitaetssystem, das sich weder richten laesst noch
+	 * diese Instanz benennt: token-aud-check => false stellt das alte Verhalten
+	 * wieder her. Das oeffnet OC10-115 und OC10-147 erneut und steht nur
+	 * deshalb zur Verfuegung, damit so eine Installation beim Update nicht
+	 * jede Anmeldung verliert.
+	 *
+	 * @throws JsonException
+	 * @throws OpenIDConnectClientException
+	 */
+	public function testAudienceCheckCanBeDisabledExplicitly(): void {
+		$this->config->method('getSystemValue')->willReturnCallback(static function ($key) {
+			if ($key === 'openid-connect') {
+				return [
+					'provider-url' => 'https://example.net',
+					'client-id' => 'owncloud-client',
+					'client-secret' => 'secret',
+					'token-aud-check' => false,
+				];
+			}
+			return null;
+		});
+
+		$payload = ['exp' => \time() + 3600, 'aud' => 'a-completely-different-client'];
+
+		$this->client = $this->getMockBuilder(Client::class)
+			->setConstructorArgs([$this->config, $this->urlGenerator, $this->session, $this->logger, $this->clientService])
+			->onlyMethods(['getAccessTokenPayload', 'verifyJWTsignature', 'setAccessToken'])
+			->getMock();
+		$this->client->method('setAccessToken');
+		$this->client->method('getAccessTokenPayload')->willReturn((object)$payload);
+		$this->client->method('verifyJWTsignature')->willReturn(true);
+
+		self::assertEquals($payload['exp'], $this->client->verifyToken('some-token'));
+	}
+
+	/**
+	 * Und der Standard ist an: ohne jede Angabe in der Konfiguration wird ein
+	 * fremdes Publikum abgewiesen. Das ist der eigentliche Unterschied zum
+	 * Stand vor diesem Fix, wo die Pruefung abgeschaltet war, solange sie
+	 * niemand ausdruecklich einschaltete.
+	 *
+	 * @throws JsonException
+	 * @throws OpenIDConnectClientException
+	 */
+	public function testAudienceCheckIsOnByDefault(): void {
+		$this->config->method('getSystemValue')->willReturnCallback(static function ($key) {
+			if ($key === 'openid-connect') {
+				return [
+					'provider-url' => 'https://example.net',
+					'client-id' => 'owncloud-client',
+					'client-secret' => 'secret',
+				];
+			}
+			return null;
+		});
+
+		$this->client = $this->getMockBuilder(Client::class)
+			->setConstructorArgs([$this->config, $this->urlGenerator, $this->session, $this->logger, $this->clientService])
+			->onlyMethods(['getAccessTokenPayload', 'verifyJWTsignature', 'setAccessToken'])
+			->getMock();
+		$this->client->method('setAccessToken');
+		$this->client->method('getAccessTokenPayload')->willReturn((object)[
+			'exp' => \time() + 3600,
+			'aud' => 'a-completely-different-client',
+		]);
+		$this->client->method('verifyJWTsignature')->willReturn(true);
+
+		$this->expectException(OpenIDConnectClientException::class);
+		$this->expectExceptionMessage('Token audience does not match the configured client-id');
+
+		$this->client->verifyToken('some-token');
+	}
 }
