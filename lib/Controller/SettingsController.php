@@ -17,6 +17,57 @@ use OCP\IRequest;
 class SettingsController extends Controller {
 	private const CONFIG_KEY = 'openid-connect';
 
+	/**
+	 * Oberste Schlüssel, die das Formular vollständig abbildet: Was hier steht,
+	 * ergibt sich beim Speichern allein aus dem Formular. Alles andere - etwa
+	 * "token-aud-check", "audience" oder Schlüssel einer übernommenen
+	 * Konfiguration aus config.php - kennt das Formular nicht und bleibt beim
+	 * Speichern unverändert erhalten, siehe keepUnmanagedKeys().
+	 */
+	private const FORM_KEYS = [
+		'provider-url',
+		'client-id',
+		'client-secret',
+		'scopes',
+		'mode',
+		'search-attribute',
+		'loginButtonName',
+		'autoRedirectOnLoginPage',
+		'insecure',
+		'redirect-url',
+		'post_logout_redirect_uri',
+		'allowed-user-backends',
+		'token-introspection-endpoint-client-id',
+		'token-introspection-endpoint-client-secret',
+		'exchange-token-mode-before-introspection',
+		'use-access-token-payload-for-user-info',
+		'use-access-token-introspection-for-user-info',
+		'jwt-self-signed-jwk-header-supported',
+		'ocis-routing-policy-claim',
+		// alte Schreibweise aus 2.1.x/2.2.x; das Formular zeigt sie im Feld
+		// ocis-routing-policy-claim an und speichert sie unter dem richtigen Namen
+		'ocis-routing-poclicy-claim',
+		'ocis-routing-policy-cookie',
+		'ocis-routing-policy-cookie-directives',
+		'provider-params',
+		'auth-params',
+		'auto-provision',
+	];
+
+	/**
+	 * Schlüssel unter "auto-provision", die das Formular abbildet.
+	 */
+	private const FORM_AUTO_PROVISION_KEYS = [
+		'enabled',
+		'groups',
+		'email-claim',
+		'display-name-claim',
+		'picture-claim',
+		'provisioning-claim',
+		'provisioning-attribute',
+		'update',
+	];
+
 	public function __construct(
 		$appName,
 		IRequest $request,
@@ -45,6 +96,7 @@ class SettingsController extends Controller {
 			], Http::STATUS_BAD_REQUEST);
 		}
 
+		$config = $this->keepUnmanagedKeys($config, $this->getEffectiveConfig()['config']);
 		$this->config->setAppValue(Application::APPID, self::CONFIG_KEY, $this->encodeConfig($config));
 		return new JSONResponse([
 			'status' => 'success',
@@ -85,6 +137,36 @@ class SettingsController extends Controller {
 		];
 	}
 
+	/**
+	 * Übernimmt aus der bisher wirksamen Konfiguration alle Schlüssel, die das
+	 * Formular nicht abbildet. Das Speichern schreibt die Konfiguration in die
+	 * App-Konfiguration, die config.php wird danach nicht mehr gelesen - ohne
+	 * diesen Schritt gingen dort gesetzte Schlüssel wie "token-aud-check" oder
+	 * "audience" beim ersten Speichern verloren, ohne dass es jemand sieht.
+	 *
+	 * @param array $fromForm die aus dem Formular gebaute Konfiguration
+	 * @param array $previous die bisher wirksame Konfiguration
+	 * @return array
+	 */
+	private function keepUnmanagedKeys(array $fromForm, array $previous): array {
+		foreach ($previous as $key => $value) {
+			if (!\in_array($key, self::FORM_KEYS, true) && !\array_key_exists($key, $fromForm)) {
+				$fromForm[$key] = $value;
+			}
+		}
+		$previousAutoProvision = $previous['auto-provision'] ?? null;
+		if (\is_array($previousAutoProvision) && \is_array($fromForm['auto-provision'] ?? null)) {
+			foreach ($previousAutoProvision as $key => $value) {
+				if (!\in_array($key, self::FORM_AUTO_PROVISION_KEYS, true)
+					&& !\array_key_exists($key, $fromForm['auto-provision'])
+				) {
+					$fromForm['auto-provision'][$key] = $value;
+				}
+			}
+		}
+		return $fromForm;
+	}
+
 	private function normalizeConfig(array $config): array {
 		$autoProvision = $config['auto-provision'] ?? [];
 		$autoUpdate = $autoProvision['update'] ?? [];
@@ -108,7 +190,7 @@ class SettingsController extends Controller {
 			'use-access-token-payload-for-user-info' => (bool)($config['use-access-token-payload-for-user-info'] ?? false),
 			'use-access-token-introspection-for-user-info' => (bool)($config['use-access-token-introspection-for-user-info'] ?? false),
 			'jwt-self-signed-jwk-header-supported' => (bool)($config['jwt-self-signed-jwk-header-supported'] ?? false),
-			'ocis-routing-policy-claim' => (string)($config['ocis-routing-policy-claim'] ?? ''),
+			'ocis-routing-policy-claim' => (string)($config['ocis-routing-policy-claim'] ?? $config['ocis-routing-poclicy-claim'] ?? ''),
 			'ocis-routing-policy-cookie' => (string)($config['ocis-routing-policy-cookie'] ?? 'owncloud-selector'),
 			'ocis-routing-policy-cookie-directives' => (string)($config['ocis-routing-policy-cookie-directives'] ?? 'path=/;'),
 			'provider-params' => $this->encodeJsonField($config['provider-params'] ?? []),

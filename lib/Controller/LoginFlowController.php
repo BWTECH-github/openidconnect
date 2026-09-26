@@ -148,7 +148,13 @@ class LoginFlowController extends Controller {
 			$openIdConfig = $openid->getOpenIdConfig();
 			$cookieName = $openIdConfig['ocis-routing-policy-cookie'] ?? 'owncloud-selector';
 			$cookieDirectives = $openIdConfig['ocis-routing-policy-cookie-directives'] ?? 'path=/;';
-			$attribute = $openIdConfig['ocis-routing-policy-claim'] ?? 'ocis.routing.policy';
+			// openidconnect 2.1.x bis 2.2.x lasen den Schlüssel mit Tippfehler
+			// ("poclicy", upstream #289 erst in 2.3.0 behoben). Eine übernommene
+			// Konfiguration, die ihn so gesetzt hat, gilt weiter; die richtige
+			// Schreibweise hat Vorrang.
+			$attribute = $openIdConfig['ocis-routing-policy-claim']
+				?? $openIdConfig['ocis-routing-poclicy-claim']
+				?? 'ocis.routing.policy';
 			if (\property_exists($userInfo, $attribute)) {
 				$response->addHeader('Set-Cookie', "$cookieName={$userInfo->$attribute};$cookieDirectives");
 			}

@@ -4,6 +4,41 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
+## [2.4.7] - 2026-09-26
+
+### Fixed
+
+- **Nach einem Umzug von ownCloud 10 lehnte die Audience-Prüfung die Token
+  vieler Anbieter ab.** Bis upstream 2.3.4 gab es keine Prüfung und damit auch
+  keinen Konfigurationsschlüssel dafür. Seit 2.4.6 musste bei einem JWT die
+  `client-id` in `aud` stehen – Keycloak schreibt dort aber `account` oder
+  nichts, Entra ID v1.0 die App-ID-URI, AD FS
+  `microsoft:identityserver:<Kennung>`. Eine unverändert übernommene
+  Konfiguration verlor damit jede Anmeldung. Jetzt gilt dieselbe Regel wie
+  upstream 2.3.5/2.4.2 (#374): Passt `aud` nicht, entscheidet der ranghöchste
+  vorhandene Claim aus `azp`, `appid`, `client_id` – er muss die `client-id`
+  nennen. Ein Token eines anderen Clients bleibt abgewiesen (OC10-115,
+  OC10-147); gilt jetzt für JWT und Introspection gleich.
+- **Der Schlüssel `audience` aus upstream 2.3.5/2.4.2 wurde ignoriert.** Eine
+  übernommene Konfiguration, die ihn setzt, prüfte hier gegen die `client-id`
+  und wies die Token ab. `audience` (String oder Liste) ersetzt jetzt wie
+  upstream die `client-id` als erwartetes Publikum und schaltet den Weg über
+  `azp`/`appid`/`client_id` ab; ein unbrauchbarer Wert weist alles ab und
+  meldet das einmal als Warnung. `token-aud-check => false` schaltet weiterhin
+  alles ab. Die Fehlermeldung lautet jetzt
+  `Token audience does not match the expected audience`.
+- **Das Speichern im Einstellungsformular verwarf Schlüssel, die das Formular
+  nicht kennt.** Beim ersten Speichern wandert die Konfiguration aus der
+  `config.php` in die App-Konfiguration, die `config.php` zählt danach nicht
+  mehr. `token-aud-check`, `audience` und alle anderen nicht abgebildeten
+  Schlüssel (auch unter `auto-provision`) gingen dabei still verloren. Sie
+  bleiben jetzt erhalten.
+- **`ocis-routing-poclicy-claim` aus 2.1.x/2.2.x wird wieder gelesen.** Die
+  Versionen lasen den Schlüssel mit Tippfehler (upstream #289, behoben in
+  2.3.0). Eine übernommene Konfiguration mit dieser Schreibweise gilt weiter,
+  die richtige hat Vorrang; das Formular zeigt den Wert im richtigen Feld und
+  speichert ihn unter dem richtigen Namen.
+
 ## [2.4.6] - 2026-09-21
 
 ### Security

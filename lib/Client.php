@@ -37,7 +37,17 @@ use OCP\ISession;
 use OCP\IURLGenerator;
 
 class Client extends OpenIDConnectClient {
+	/**
+	 * Claims, mit denen ein Anbieter den Client benennt, für den er ein Token
+	 * ausgestellt hat - in dieser Rangfolge: "azp" (OpenID Connect Core 1.0 §2),
+	 * "appid" (Entra ID v1.0, AD FS), "client_id" (RFC 7662 §2.2). Wie upstream
+	 * owncloud/openidconnect 2.3.5/2.4.2 (#374).
+	 */
+	private const CLIENT_NAMING_CLAIMS = ['azp', 'appid', 'client_id'];
+
 	private ?object $wellKnownConfig = null;
+	private bool $audienceFallbackReported = false;
+	private bool $unusableAudienceReported = false;
 
 	/**
 	 * @throws \JsonException
@@ -153,7 +163,8 @@ class Client extends OpenIDConnectClient {
 			// different client would otherwise authenticate as the matching account,
 			// over bearer auth or the browser session (OC10-115).
 			if ($this->audienceCheckEnabled($config)) {
-				$this->verifyAudience($payload, $config['client-id'] ?? $this->getClientID());
+				$clientId = $config['client-id'] ?? $this->getClientID();
+				$this->verifyAudience($payload, $this->getExpectedAudiences($config, $clientId), isset($config['audience']), $clientId);
 			}
 			// Log only the expiry, never the decoded claims (they carry PII).
 			$this->logger->debug('Access token verified (exp: ' . ($payload->exp ?? 'n/a') . ')');
@@ -191,17 +202,15 @@ class Client extends OpenIDConnectClient {
 		// alone authenticated its subject — unauthenticated, via the Authorization
 		// header (OC10-147).
 		//
-		// RFC 7662 §2.2 defines "client_id" as the client the token was issued to,
-		// which is exactly the claim that answers this. Unlike RFC 7519, RFC 7662
-		// makes "aud" optional and providers commonly use it for the resource
-		// server rather than the client (Keycloak emits "account", Okta
-		// "api://default"), so the audience claim is only the fallback. Still fails
-		// closed: if neither names us, verifyAudience() throws.
+		// RFC 7662 makes "aud" optional and providers commonly use it for the
+		// resource server rather than the client (Keycloak emits "account", Okta
+		// "api://default"). Unless "audience" is configured, a client-naming claim
+		// - "client_id" per RFC 7662 §2.2 among them - is therefore accepted
+		// instead, see verifyAudience(). Still fails closed: if nothing names us,
+		// verifyAudience() throws.
 		if ($this->audienceCheckEnabled($config)) {
 			$clientId = $config['client-id'] ?? $this->getClientID();
-			if ($clientId === null || ($introData->client_id ?? null) !== $clientId) {
-				$this->verifyAudience($introData, $clientId);
-			}
+			$this->verifyAudience($introData, $this->getExpectedAudiences($config, $clientId), isset($config['audience']), $clientId);
 		}
 		return $introData->exp;
 	}
@@ -221,25 +230,200 @@ class Client extends OpenIDConnectClient {
 	}
 
 	/**
-	 * Ensures the token was issued for this relying party by asserting that the
-	 * configured client-id is present in the token's "aud" (audience) claim.
-	 * The claim may be a single string or an array of strings per RFC 7519 and
-	 * RFC 7662.
+	 * Die Audience-Werte, die ein Zugriffstoken tragen muss.
 	 *
-	 * @param object $payload the decoded access token payload or the
-	 *                        introspection response
-	 * @param string|null $clientId the configured relying party client-id
-	 * @throws OpenIDConnectClientException if the audience does not match
+	 * Standard ist die client-id. Ein Zugriffstoken nennt in "aud" nach RFC 9068
+	 * §3 aber den Ressourcenserver, nicht den Client; Anbieter, die das so
+	 * halten, brauchen den Schlüssel "audience", der die client-id ersetzt (nicht
+	 * ergänzt). Den Schlüssel gibt es seit upstream openidconnect 2.3.5 für
+	 * ownCloud 10 und 2.4.2 für ownCloud 11 (#374) - eine übernommene
+	 * Konfiguration, die ihn setzt, muss hier genauso wirken wie dort.
+	 *
+	 * @param array|null $config die openid-connect-Konfiguration
+	 * @param string|null $clientId die konfigurierte client-id
+	 * @return string[] nur nicht-leere Zeichenketten; leer heißt, dass kein
+	 *                  Token angenommen wird - so muss ein kaputter Wert wirken
 	 */
-	private function verifyAudience(object $payload, ?string $clientId): void {
+	private function getExpectedAudiences(?array $config, ?string $clientId): array {
+		$configured = $config['audience'] ?? $clientId;
+		if (!\is_array($configured)) {
+			$configured = [$configured];
+		}
+		// Alles andere als eine brauchbare Zeichenkette ist ein Konfigurationsfehler
+		// und darf die Prüfung nicht aufweichen - ein leerer String würde sonst auf
+		// ein Token mit leerem "aud" passen.
+		$expected = $this->usableAudienceStrings($configured);
+		if (isset($config['audience'])
+			&& ($expected === [] || \count($expected) !== \count($configured))
+			&& !$this->unusableAudienceReported
+		) {
+			$this->unusableAudienceReported = true;
+			$this->logger->warning(\sprintf(
+				$expected === []
+					? 'No usable "audience" in the openid-connect config, only non-empty strings are accepted, so every access token will be rejected: %s'
+					: 'Ignoring unusable "audience" values in the openid-connect config, only non-empty strings are accepted: %s',
+				\json_encode($config['audience'], JSON_UNESCAPED_SLASHES)
+			));
+		}
+		return $expected;
+	}
+
+	/**
+	 * Stellt sicher, dass das Token für diese Instanz ausgestellt wurde: Eine der
+	 * erwarteten Audiences muss in "aud" stehen (String oder Liste nach RFC 7519
+	 * und RFC 7662). Ohne diese Prüfung würde ein Token angenommen, das derselbe
+	 * Anbieter für einen anderen Client ausgestellt hat (OC10-115, OC10-147).
+	 *
+	 * Ist "audience" nicht gesetzt, genügt stattdessen ein Claim, der diese
+	 * Instanz als den Client benennt, siehe tokenNamesThisClient(). Das ist der
+	 * Weg, auf dem Keycloak (kein oder "account" in "aud"), Entra ID und AD FS
+	 * weiter funktionieren - und damit jede Konfiguration, die von einer
+	 * Vorgängerversion ohne Audience-Prüfung übernommen wurde. Wie upstream #374.
+	 *
+	 * @param object $payload der Payload des Zugriffstokens oder die
+	 *                        Introspection-Antwort
+	 * @param string[] $expectedAudiences aus getExpectedAudiences()
+	 * @param bool $audienceIsAuthoritative ob "audience" gesetzt ist; dann zählt
+	 *                                      nur "aud"
+	 * @param string|null $clientId die konfigurierte client-id
+	 * @throws OpenIDConnectClientException wenn nichts diese Instanz benennt
+	 */
+	private function verifyAudience(
+		object $payload,
+		array $expectedAudiences,
+		bool $audienceIsAuthoritative,
+		?string $clientId
+	): void {
 		$audience = $payload->aud ?? null;
 		$audiences = \is_array($audience) ? $audience : [$audience];
-		if ($clientId === null || !\in_array($clientId, $audiences, true)) {
-			// The audience is claim data, not a secret, and naming it is what
-			// makes a misconfigured identity provider diagnosable.
-			$this->logger->error('Token audience does not match the configured client-id: ' . \json_encode($audience));
-			throw new OpenIDConnectClientException('Token audience does not match the configured client-id');
+		foreach ($expectedAudiences as $expected) {
+			// strikt und bewusst nicht array_intersect(): das vergleicht lose
+			if (\in_array($expected, $audiences, true)) {
+				return;
+			}
 		}
+		if (!$audienceIsAuthoritative) {
+			$this->reportClientClaimMismatch($payload, $clientId);
+			$claim = $this->tokenNamesThisClient($payload, $clientId);
+			if ($claim !== null) {
+				// nur erwähnenswert, wenn "aud" etwas trägt, das man als
+				// "audience" eintragen könnte
+				if ($this->usableAudienceStrings($audiences) !== []) {
+					$this->reportAudienceFallbackOnce($claim, $audience);
+				}
+				return;
+			}
+		}
+		// "aud" ist Claim-Inhalt, kein Geheimnis - ihn zu nennen macht einen falsch
+		// eingerichteten Anbieter erst diagnostizierbar.
+		$this->logger->error(\sprintf(
+			'Token audience does not match the expected audience: token "aud" is %s, expected one of %s',
+			\json_encode($audience, JSON_UNESCAPED_SLASHES),
+			\json_encode($expectedAudiences, JSON_UNESCAPED_SLASHES)
+		));
+		throw new OpenIDConnectClientException('Token audience does not match the expected audience');
+	}
+
+	/**
+	 * Welcher Claim diese Instanz als den Client benennt, für den das Token
+	 * ausgestellt wurde - oder null.
+	 *
+	 * Es entscheidet der ranghöchste Claim, der überhaupt einen Wert trägt, nicht
+	 * der erste, der zufällig passt: Sonst könnte ein anderer Client desselben
+	 * Anbieters ein ehrliches "azp" mit seinem eigenen Namen und daneben ein
+	 * festverdrahtetes "client_id" mit unserem vorlegen.
+	 *
+	 * @param object $payload
+	 * @param string|null $clientId die konfigurierte client-id
+	 * @return string|null
+	 */
+	private function tokenNamesThisClient(object $payload, ?string $clientId): ?string {
+		if ($clientId === null || $clientId === '') {
+			return null;
+		}
+		$claim = $this->decidingClientClaim($payload);
+		if ($claim === null) {
+			return null;
+		}
+		// strikt: eine numerische client-id darf nicht auf einen Claim anderen Typs passen
+		return $clientId === $payload->$claim ? $claim : null;
+	}
+
+	/**
+	 * Der ranghöchste client-benennende Claim, der einen Wert trägt (ein auf
+	 * JSON null gesetzter Claim benennt niemanden und entscheidet nicht).
+	 *
+	 * @param object $payload
+	 * @return string|null
+	 */
+	private function decidingClientClaim(object $payload): ?string {
+		foreach (self::CLIENT_NAMING_CLAIMS as $claim) {
+			if (isset($payload->$claim)) {
+				return $claim;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Sagt, wenn ein client-benennender Claim die Ablehnung entschieden hat - die
+	 * anschließende Meldung nennt nur die Audience und würde sonst auf eine
+	 * falsche Fährte führen.
+	 *
+	 * @param object $payload
+	 * @param string|null $clientId
+	 */
+	private function reportClientClaimMismatch(object $payload, ?string $clientId): void {
+		if ($clientId === null || $clientId === '') {
+			return;
+		}
+		$claim = $this->decidingClientClaim($payload);
+		if ($claim !== null && $clientId !== $payload->$claim) {
+			$this->logger->error(\sprintf(
+				'Token was issued to another client: "%s" is %s, this relying party is %s. '
+				. 'Lower-precedence claims are deliberately not consulted once a more '
+				. 'authoritative one names somebody else.',
+				$claim,
+				\json_encode($payload->$claim, JSON_UNESCAPED_SLASHES),
+				\json_encode($clientId, JSON_UNESCAPED_SLASHES)
+			));
+		}
+	}
+
+	/**
+	 * Die als Audience brauchbaren Werte, also nicht-leere Zeichenketten - für
+	 * beide Seiten des Vergleichs gleich.
+	 *
+	 * @param array $audiences
+	 * @return string[]
+	 */
+	private function usableAudienceStrings(array $audiences): array {
+		return \array_values(\array_filter($audiences, static function ($audience) {
+			return \is_string($audience) && $audience !== '';
+		}));
+	}
+
+	/**
+	 * Einmal je Instanz auf Stufe info: Das Token wurde über einen
+	 * client-benennenden Claim angenommen, nicht über "aud". Info statt warning,
+	 * weil das bei jedem Anbieter dieser Art der normale Weg ist.
+	 *
+	 * @param string $claim
+	 * @param mixed $audience
+	 */
+	private function reportAudienceFallbackOnce(string $claim, $audience): void {
+		if ($this->audienceFallbackReported) {
+			return;
+		}
+		$this->audienceFallbackReported = true;
+		$this->logger->info(\sprintf(
+			'Access token "aud" does not name this relying party, accepted because "%s" matches the configured client-id. '
+			. 'To have the audience enforced, set the openid-connect "audience" config key to what the provider sends '
+			. 'in "aud" - but only if that value is one only this instance can be issued a token for, since a shared or '
+			. 'tenant-wide resource identifier would accept tokens issued to other clients of the same provider: %s',
+			$claim,
+			\json_encode($audience, JSON_UNESCAPED_SLASHES)
+		));
 	}
 
 	#[\Override]

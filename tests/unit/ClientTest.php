@@ -282,7 +282,7 @@ class ClientTest extends TestCase {
 
 		if (!$expectValid) {
 			$this->expectException(OpenIDConnectClientException::class);
-			$this->expectExceptionMessage('Token audience does not match the configured client-id');
+			$this->expectExceptionMessage('Token audience does not match the expected audience');
 		}
 
 		$exp = $this->client->verifyToken('some-token');
@@ -328,7 +328,7 @@ class ClientTest extends TestCase {
 
 		if (!$expectValid) {
 			$this->expectException(OpenIDConnectClientException::class);
-			$this->expectExceptionMessage('Token audience does not match the configured client-id');
+			$this->expectExceptionMessage('Token audience does not match the expected audience');
 		}
 
 		$exp = $this->client->verifyToken('opaque-token');
@@ -402,7 +402,7 @@ class ClientTest extends TestCase {
 
 		if (!$expectValid) {
 			$this->expectException(OpenIDConnectClientException::class);
-			$this->expectExceptionMessage('Token audience does not match the configured client-id');
+			$this->expectExceptionMessage('Token audience does not match the expected audience');
 		}
 
 		$exp = $this->client->verifyToken('opaque-token');
@@ -481,7 +481,7 @@ class ClientTest extends TestCase {
 		$this->client->method('verifyJWTsignature')->willReturn(true);
 
 		$this->expectException(OpenIDConnectClientException::class);
-		$this->expectExceptionMessage('Token audience does not match the configured client-id');
+		$this->expectExceptionMessage('Token audience does not match the expected audience');
 
 		$this->client->verifyToken('some-token');
 	}

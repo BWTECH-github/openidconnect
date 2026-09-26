@@ -216,4 +216,36 @@ class LoginFlowControllerLoginTest extends TestCase {
 		$headers = $response->getHeaders();
 		self::assertEquals('owncloud-selector=ocis;path=/;', $headers['Set-Cookie']);
 	}
+
+	public function providesRoutingClaimConfig(): array {
+		return [
+			// Schreibweise aus openidconnect 2.1.x/2.2.x (upstream #289)
+			'alter Schlüssel mit Tippfehler' => [['ocis-routing-poclicy-claim' => 'routing'], 'ocis'],
+			// die richtige Schreibweise hat Vorrang
+			'beide Schreibweisen' => [['ocis-routing-poclicy-claim' => 'routing', 'ocis-routing-policy-claim' => 'ocis.routing.policy'], 'oc10'],
+		];
+	}
+
+	/**
+	 * @dataProvider providesRoutingClaimConfig
+	 */
+	public function testLoginRoutingClaimFromPredecessorConfig(array $config, string $expectedCookieValue): void {
+		$this->client->method('getOpenIdConfig')->willReturn($config);
+		$this->client->method('getUserInfo')->willReturn((object)[
+			'email' => 'foo@exmaple.net',
+			'routing' => 'ocis',
+			'ocis.routing.policy' => 'oc10',
+		]);
+		$this->client->method('getIdToken')->willReturn('id');
+		$this->client->method('getAccessToken')->willReturn('access');
+		$this->client->method('getRefreshToken')->willReturn('refresh');
+		$user = $this->createMock(IUser::class);
+		$this->userLookup->method('lookupUser')->willReturn($user);
+		$this->userSession->method('createSessionToken')->willReturn(true);
+		$this->userSession->method('loginUser')->willReturn(true);
+
+		$response = $this->controller->login();
+
+		self::assertEquals("owncloud-selector=$expectedCookieValue;path=/;", $response->getHeaders()['Set-Cookie']);
+	}
 }
