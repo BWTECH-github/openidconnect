@@ -39,6 +39,23 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
   die richtige hat Vorrang; das Formular zeigt den Wert im richtigen Feld und
   speichert ihn unter dem richtigen Namen.
 
+### Bekannte Verhaltensänderung bei Umzügen von 1.0.0 bis 2.1.x
+
+- **`use-token-introspection-endpoint` wird nicht mehr ausgewertet – wie
+  upstream seit 2.2.0.** In 1.0.0 bis 2.1.1 hat der Schalter jedes Token beim
+  Anbieter per Introspection prüfen lassen, auch JWTs, über Bearer-Auth wie
+  über die Browser-Sitzung; ein beim Anbieter widerrufenes Token wurde damit
+  sofort abgelehnt. Jetzt wird ein JWT lokal gegen die Schlüssel des
+  Anbieters (JWKS) geprüft und gilt bis zu seinem `exp`, auch wenn es beim
+  Anbieter schon widerrufen ist; nur undurchsichtige Token gehen an die
+  Introspection. Die Instanz braucht dafür Zugriff auf den JWKS-Endpunkt des
+  Anbieters. Der Schlüssel bleibt in der übernommenen Konfiguration stehen,
+  wirkt aber nicht. Wer schnellen Widerruf braucht, stellt am Anbieter eine
+  kurze Lebensdauer für Zugriffstoken ein. Bewusst nicht wieder eingeführt:
+  Wer von 2.2.0 oder neuer umzieht, hat den Schlüssel oft noch als Altlast in
+  der Konfiguration, und er würde dort unvermittelt jede Anfrage an den
+  Anbieter binden.
+
 ## [2.4.6] - 2026-09-21
 
 ### Security

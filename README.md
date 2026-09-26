@@ -95,6 +95,12 @@ $CONFIG = [
 | `ocis-routing-policy-cookie` | string | Cookie name (default `owncloud-selector`). |
 | `ocis-routing-policy-cookie-directives` | string | Cookie directives (default `path=/;`). |
 
+`use-token-introspection-endpoint` from openidconnect 1.0.0–2.1.x is not
+evaluated any more, as upstream since 2.2.0: a JWT is verified locally against
+the provider's JWKS and stays valid until its `exp`, even if the provider has
+revoked it; only opaque tokens are sent to introspection. Configurations taken
+over from those versions keep the key, but it has no effect.
+
 ### Auto provisioning
 
 ```php
