@@ -29,6 +29,7 @@ use OC\User\LoginException;
 use OC\User\Session;
 use OCA\OpenIdConnect\Client;
 use OCA\OpenIdConnect\Controller\LoginFlowController;
+use OCA\OpenIdConnect\ProviderRequestException;
 use OCA\OpenIdConnect\Service\AutoProvisioningService;
 use OCA\OpenIdConnect\Service\UserLookupService;
 use OCP\AppFramework\Http\RedirectResponse;
@@ -115,6 +116,57 @@ class LoginFlowControllerLoginTest extends TestCase {
 		$this->client->method('authenticate')->willThrowException(new OpenIDConnectClientException('foo'));
 		$this->expectException(HintException::class);
 		$this->expectExceptionMessage('Error in OpenIdConnect:foo');
+
+		$this->controller->login();
+	}
+
+	public function providesProviderFailures(): array {
+		$unreachable = new ProviderRequestException(new \RuntimeException('cURL error 6: Could not resolve host: idp.internal.example'));
+		return [
+			// Klick auf den Login-Knopf: authorization_endpoint aus der Discovery
+			'authenticate' => [$unreachable, null],
+			// Rückkehr vom Anbieter: Userinfo-Endpunkt
+			'user info' => [null, $unreachable],
+		];
+	}
+
+	/**
+	 * Anbieter nicht erreichbar: kontrollierte Fehlerseite (HintException ->
+	 * 503 im Kern) statt HTTP 500, ohne interne Adressen und ohne Stacktrace im
+	 * Protokoll - die Ursache hat Client::fetchURL() schon protokolliert.
+	 *
+	 * @dataProvider providesProviderFailures
+	 */
+	public function testLoginWithUnavailableProvider(?\Exception $onAuthenticate, ?\Exception $onUserInfo): void {
+		$this->client->method('getOpenIdConfig')->willReturn([]);
+		if ($onAuthenticate !== null) {
+			$this->client->method('authenticate')->willThrowException($onAuthenticate);
+		}
+		if ($onUserInfo !== null) {
+			$this->client->method('getUserInfo')->willThrowException($onUserInfo);
+		}
+		$this->userLookup->expects(self::never())->method('lookupUser');
+		$this->logger->expects(self::never())->method('logException');
+		$this->logger->expects(self::never())->method('error');
+
+		try {
+			$this->controller->login();
+			self::fail('expected a HintException');
+		} catch (HintException $ex) {
+			self::assertSame('Sign-in with the identity provider failed', $ex->getMessage());
+			self::assertStringNotContainsString('idp.internal.example', $ex->getMessage() . $ex->getHint());
+		}
+	}
+
+	/**
+	 * Userinfo-Endpunkt antwortet, aber unbrauchbar (Bibliotheksfehler): wie beim
+	 * Anmeldeschritt davor eine Fehlerseite statt HTTP 500.
+	 */
+	public function testLoginUserInfoClientExceptionIsReported(): void {
+		$this->client->method('getOpenIdConfig')->willReturn([]);
+		$this->client->method('getUserInfo')->willThrowException(new OpenIDConnectClientException('Invalid JWT signature'));
+		$this->expectException(HintException::class);
+		$this->expectExceptionMessage('Error in OpenIdConnect:Invalid JWT signature');
 
 		$this->controller->login();
 	}

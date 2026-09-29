@@ -4,6 +4,56 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
+## [2.4.8] - 2026-09-29
+
+### Fixed
+
+- **Ein nicht erreichbarer Anbieter endete in HTTP 500 statt in einer
+  kontrollierten Antwort.** Der HTTP-Abruf der App reichte die rohe
+  Guzzle-Ausnahme durch; die Bibliothek wirft an dieser Stelle eine
+  `OpenIDConnectClientException`, und nur auf die sind die catch-Blöcke der App
+  gebaut. Dasselbe galt für Fehlerstatus des Anbieters (4xx/5xx). Jetzt kommt
+  eine `OpenIDConnectClientException`, und alle Wege antworten kontrolliert:
+  - `/index.php/apps/openidconnect/config` (Ziel von
+    `/.well-known/openid-configuration`): HTTP 503 mit
+    `{"error":"temporarily_unavailable","error_description":"The OpenID Connect provider is not available."}`
+    – auch wenn der Anbieter kein JSON-Objekt liefert (Fehlerseite eines
+    Proxys, leerer Body, JSON-Liste) oder keine `provider-url` gesetzt ist.
+    Desktop-, Android- und iOS-Client werten nur HTTP 200 aus und fallen wie
+    bisher bei 500 auf ihre Vorgaben zurück.
+  - Login-Knopf und Rückkehr vom Anbieter (Discovery, Token-, JWKS- und
+    Userinfo-Endpunkt): Fehlerseite „Sign-in with the identity provider
+    failed“ (HTTP 503) ohne interne Adressen. Ein Fehler am
+    Userinfo-Endpunkt wird jetzt wie einer beim Anmeldeschritt davor
+    behandelt, statt ungefangen durchzulaufen.
+  - `Authorization: Bearer …` an Seiten- und OCS-Routen: nicht angemeldet
+    (401) statt HTTP 500 beziehungsweise einer leeren Antwort mit HTTP 200 bei
+    OCS. WebDAV antwortete schon vorher mit 401.
+  - Angemeldete OIDC-Sitzungen: Ließ sich das Zugriffstoken beim Anbieter
+    nicht prüfen oder erneuern – Anbieter weg oder Refresh-Token dort
+    abgelehnt (`invalid_grant`) –, endete bei fälliger Erneuerung jede Seite in
+    HTTP 500, bis der Anbieter wieder antwortete. Jetzt wird die Sitzung
+    beendet und die Anmeldeseite erscheint; Widerruf und Abmeldung beim
+    Anbieter werden dabei nicht mehr mit Stacktrace protokolliert.
+
+  Die Ursache steht einmal je Anfrage als Warnung im Protokoll:
+  `OpenID Connect provider request failed: <Methode> <Adresse>: <Ausnahme>: <Meldung>`.
+  Bisher kamen dazu Fehlerzeilen mit vollständigem Stacktrace. War der
+  Anbieter in einer Anfrage schon nicht erreichbar (DNS, Verbindung,
+  Zeitüberschreitung), wird er in derselben Anfrage nicht noch einmal
+  angefragt.
+- **Anfragen an den Anbieter haben wieder eine Zeitgrenze.** Die Bibliothek
+  begrenzt sie auf 60 Sekunden, der Abruf über den HTTP-Client des Kerns hatte
+  keine Grenze: Ein Anbieter, der Pakete verwirft, hielt jede Anfrage bis zum
+  Verbindungs-Timeout des Systems fest.
+- **Ein nicht erreichbarer Anbieter gilt nicht als „kein
+  Introspection-Endpunkt“.** Weil Abruffehler jetzt als
+  `OpenIDConnectClientException` kommen, hätte die Probe auf einen
+  Introspection-Endpunkt sie als „keiner vorhanden“ gelesen und ein
+  undurchsichtiges Token über den Userinfo-Endpunkt geprüft – ohne
+  Audience-Prüfung. Die Probe gibt den Abruffehler deshalb weiter, das Token
+  wird abgewiesen.
+
 ## [2.4.7] - 2026-09-26
 
 ### Fixed

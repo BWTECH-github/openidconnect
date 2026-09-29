@@ -35,6 +35,7 @@ use OCP\IConfig;
 use OCP\ILogger;
 use OCP\ISession;
 use OCP\IURLGenerator;
+use Psr\Http\Client\NetworkExceptionInterface;
 
 class Client extends OpenIDConnectClient {
 	/**
@@ -48,6 +49,11 @@ class Client extends OpenIDConnectClient {
 	private ?object $wellKnownConfig = null;
 	private bool $audienceFallbackReported = false;
 	private bool $unusableAudienceReported = false;
+	/**
+	 * Der Netzwerkfehler, mit dem der Anbieter in dieser Anfrage schon einmal
+	 * nicht erreichbar war - siehe fetchURL().
+	 */
+	private ?\Throwable $unreachableCause = null;
 
 	/**
 	 * @throws \JsonException
@@ -116,13 +122,33 @@ class Client extends OpenIDConnectClient {
 	}
 
 	/**
-	 * @throws OpenIDConnectClientException
-	 * @throws \JsonException
+	 * Das Discovery-Dokument des Anbieters, wie es /apps/openidconnect/config
+	 * weiterreicht.
+	 *
+	 * @throws ProviderRequestException Anbieter nicht erreichbar, Fehlerstatus
+	 *                                  oder kein JSON-Objekt als Antwort
+	 * @throws OpenIDConnectClientException keine provider-url konfiguriert
 	 */
-	public function getWellKnownConfig() {
-		if (!$this->wellKnownConfig) {
+	public function getWellKnownConfig(): object {
+		if ($this->wellKnownConfig === null) {
 			$well_known_config_url = \rtrim($this->getProviderURL(), '/') . '/.well-known/openid-configuration';
-			$this->wellKnownConfig = \json_decode($this->fetchURL($well_known_config_url), false, 512, JSON_THROW_ON_ERROR);
+			$body = $this->fetchURL($well_known_config_url);
+			try {
+				$document = \json_decode((string)$body, false, 512, JSON_THROW_ON_ERROR);
+			} catch (\JsonException) {
+				$document = null;
+			}
+			// Eine Fehlerseite eines Proxys, ein leerer Body oder JSON ohne Objekt
+			// ist kein Discovery-Dokument - und darf nicht als solches durchgereicht
+			// werden.
+			if (!\is_object($document)) {
+				$this->logger->warning(
+					"OpenID Connect provider returned no usable discovery document (no JSON object): $well_known_config_url",
+					['app' => 'OpenID']
+				);
+				throw new ProviderRequestException();
+			}
+			$this->wellKnownConfig = $document;
 		}
 		return $this->wellKnownConfig;
 	}
@@ -431,6 +457,11 @@ class Client extends OpenIDConnectClient {
 		try {
 			# test if introspection is possible ...
 			$this->getProviderConfigValue('introspection_endpoint');
+		} catch (ProviderRequestException $ex) {
+			// Den Anbieter nicht fragen zu können heißt nicht, dass er keinen
+			// Introspection-Endpunkt hat: null führte auf den Userinfo-Weg, der
+			// ohne Audience-Prüfung anmeldet.
+			throw $ex;
 		} catch (OpenIDConnectClientException) {
 			return null;
 		}
@@ -579,11 +610,28 @@ class Client extends OpenIDConnectClient {
 	}
 
 	/**
-	 * @codeCoverageIgnore
-	 * @throws OpenIDConnectClientException
+	 * Fragt den Anbieter über den HTTP-Client des Kerns.
+	 *
+	 * Hält den Vertrag der Bibliothek ein, deren fetchURL() hier ersetzt wird:
+	 * Scheitert die Anfrage, kommt eine OpenIDConnectClientException - nie die
+	 * rohe Guzzle-Ausnahme, an der jeder catch-Block der App vorbeilief und die
+	 * als HTTP 500 endete (Discovery, JWKS, Userinfo, Token, Introspection).
+	 * Die Ursache wird genau hier einmal auf Stufe warning protokolliert; die
+	 * Ausnahme selbst nennt keine Adresse, damit sie in keiner Antwort landet.
+	 *
+	 * War der Anbieter in dieser Anfrage schon einmal nicht erreichbar, wird
+	 * nicht erneut gewartet: Jeder weitere Versuch (etwa Widerruf und Abmeldung
+	 * nach einer gescheiterten Prüfung) kostete sonst noch einmal bis zum
+	 * Timeout. Eine Fehlerantwort (4xx/5xx) gilt nicht als Ausfall.
+	 *
+	 * @throws ProviderRequestException
 	 */
 	#[\Override]
 	protected function fetchURL($url, $post_body = null, $headers = []) {
+		if ($this->unreachableCause !== null) {
+			$this->logger->debug("Not fetching $url: the provider was unreachable earlier in this request");
+			throw new ProviderRequestException($this->unreachableCause);
+		}
 		$this->logger->debug("Fetching URL: $url");
 
 		$parsedHeaders = [];
@@ -596,6 +644,10 @@ class Client extends OpenIDConnectClient {
 
 		$params = [
 			'headers' => $parsedHeaders,
+			// Grenze der Bibliothek (CURLOPT_TIMEOUT, Vorgabe 60 s). Ohne sie hängt
+			// jede Anfrage an einem Anbieter, der Pakete verwirft, bis zum
+			// Verbindungs-Timeout des Systems und hält so lange einen PHP-Prozess.
+			'timeout' => $this->getTimeout(),
 		];
 
 		try {
@@ -617,10 +669,23 @@ class Client extends OpenIDConnectClient {
 
 			return $this->processResponseAndGetBody($client->post($url, $params));
 		} catch (\Exception $ex) {
-			$exception = \get_class($ex);
-			$msg = $ex->getMessage();
-			$this->logger->error("$exception accessing $url: $msg");
-			throw $ex;
+			// keine Antwort erhalten (DNS, Verbindung, TLS-Aufbau, Timeout)
+			if ($ex instanceof NetworkExceptionInterface) {
+				$this->unreachableCause = $ex;
+			}
+			// Keine Kopfzeilen und keinen Request-Body protokollieren: Sie tragen
+			// Token und Geheimnisse.
+			$this->logger->warning(
+				\sprintf(
+					'OpenID Connect provider request failed: %s %s: %s: %s',
+					$post_body === null ? 'GET' : 'POST',
+					$url,
+					\get_class($ex),
+					$ex->getMessage()
+				),
+				['app' => 'OpenID']
+			);
+			throw new ProviderRequestException($ex);
 		}
 	}
 

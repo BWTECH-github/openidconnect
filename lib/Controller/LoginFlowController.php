@@ -30,9 +30,11 @@ use OC\User\Session;
 use OCA\OpenIdConnect\Client;
 use OCA\OpenIdConnect\Logger;
 use OCA\OpenIdConnect\OpenIdConnectAuthModule;
+use OCA\OpenIdConnect\ProviderRequestException;
 use OCA\OpenIdConnect\Service\AutoProvisioningService;
 use OCA\OpenIdConnect\Service\UserLookupService;
 use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\AppFramework\Http\RedirectResponse;
 use OCP\AppFramework\Http\Response;
@@ -78,7 +80,21 @@ class LoginFlowController extends Controller {
 		if (!$openid) {
 			return new JSONResponse([]);
 		}
-		$wellKnownData = $openid->getWellKnownConfig();
+		try {
+			$wellKnownData = $openid->getWellKnownConfig();
+		} catch (OpenIDConnectClientException $ex) {
+			// Aufrufer sind die Clients über /.well-known/openid-configuration: Sie
+			// werten nur HTTP 200 aus und fallen sonst auf ihre Vorgaben zurück. 503
+			// sagt, dass es am Anbieter liegt; nichts Internes in die Antwort.
+			if (!$ex instanceof ProviderRequestException) {
+				// ProviderRequestException hat Client::fetchURL() schon protokolliert
+				$this->logger->warning('OpenID Connect discovery document not available: ' . $ex->getMessage());
+			}
+			return new JSONResponse([
+				'error' => 'temporarily_unavailable',
+				'error_description' => 'The OpenID Connect provider is not available.',
+			], Http::STATUS_SERVICE_UNAVAILABLE);
+		}
 		return new JSONResponse($wellKnownData);
 	}
 
@@ -102,8 +118,7 @@ class LoginFlowController extends Controller {
 			$openid->storeRedirectUrl($this->request->getParam('redirect_url'));
 			$openid->authenticate();
 		} catch (OpenIDConnectClientException $ex) {
-			$this->logger->logException($ex);
-			throw new HintException('Error in OpenIdConnect:' . $ex->getMessage());
+			throw $this->signInFailed($ex);
 		}
 		// Never log raw tokens — a debug log otherwise becomes a store of live
 		// bearer/refresh credentials. Log only their presence.
@@ -114,7 +129,11 @@ class LoginFlowController extends Controller {
 		], JSON_PRETTY_PRINT);
 		$this->logger->debug('LoginFlowController::login : token presence: ' . $debugInfo);
 
-		$userInfo = $openid->getUserInfo();
+		try {
+			$userInfo = $openid->getUserInfo();
+		} catch (OpenIDConnectClientException $ex) {
+			throw $this->signInFailed($ex);
+		}
 		// Log only the claim names, not their (personally identifiable) values.
 		$this->logger->debug('User info claims: ' . \json_encode($userInfo ? \array_keys((array)$userInfo) : []));
 		if (!$userInfo) {
@@ -220,6 +239,25 @@ class LoginFlowController extends Controller {
 			'Pragma' => 'no-cache',
 		]);
 		return $resp;
+	}
+
+	/**
+	 * Die Fehlerseite für einen gescheiterten Anmeldeschritt beim Anbieter
+	 * (HintException, im Kern HTTP 503).
+	 */
+	private function signInFailed(OpenIDConnectClientException $ex): HintException {
+		if ($ex instanceof ProviderRequestException) {
+			// Ursache samt Adresse hat Client::fetchURL() schon protokolliert; die
+			// Seite nennt nichts davon.
+			return new HintException(
+				'Sign-in with the identity provider failed',
+				'The identity provider could not be reached or rejected the request. Please try again later or contact your administrator.',
+				0,
+				$ex
+			);
+		}
+		$this->logger->logException($ex);
+		return new HintException('Error in OpenIdConnect:' . $ex->getMessage());
 	}
 
 	protected function getDefaultUrl(): string {

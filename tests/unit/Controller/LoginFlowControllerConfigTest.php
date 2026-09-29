@@ -23,11 +23,14 @@
 
 namespace OCA\OpenIdConnect\Tests\Unit\Controller;
 
+use Jumbojett\OpenIDConnectClientException;
 use OC\User\Session;
 use OCA\OpenIdConnect\Client;
 use OCA\OpenIdConnect\Controller\LoginFlowController;
+use OCA\OpenIdConnect\ProviderRequestException;
 use OCA\OpenIdConnect\Service\UserLookupService;
 use OCA\OpenIdConnect\Service\AutoProvisioningService;
+use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\ICacheFactory;
 use OCP\ILogger;
@@ -106,9 +109,49 @@ class LoginFlowControllerConfigTest extends TestCase {
 
 	public function testConfig(): void {
 		$this->client->method('getOpenIdConfig')->willReturn([]);
-		$this->client->method('getWellKnownConfig')->willReturn('{"foo": "bar"}');
+		$this->client->method('getWellKnownConfig')->willReturn((object)['foo' => 'bar']);
 
 		$response = $this->controller->config();
-		self::assertEquals(new JSONResponse('{"foo": "bar"}'), $response);
+		self::assertEquals(new JSONResponse((object)['foo' => 'bar']), $response);
+	}
+
+	/**
+	 * Anbieter nicht erreichbar oder Discovery-Dokument unbrauchbar: 503 mit
+	 * JSON-Fehler statt HTTP 500. Die Clients fallen bei jedem Status außer 200
+	 * ohnehin auf ihre Vorgaben zurück; die Antwort nennt nichts Internes.
+	 */
+	public function testConfigProviderUnavailable(): void {
+		$this->client->method('getOpenIdConfig')->willReturn([]);
+		$this->client->method('getWellKnownConfig')->willThrowException(new ProviderRequestException(
+			new \RuntimeException('cURL error 6: Could not resolve host: idp.internal.example')
+		));
+		// die Ursache hat Client::fetchURL() schon protokolliert
+		$this->logger->expects(self::never())->method('warning');
+		$this->logger->expects(self::never())->method('logException');
+
+		$response = $this->controller->config();
+
+		self::assertSame(Http::STATUS_SERVICE_UNAVAILABLE, $response->getStatus());
+		self::assertSame([
+			'error' => 'temporarily_unavailable',
+			'error_description' => 'The OpenID Connect provider is not available.',
+		], $response->getData());
+		self::assertStringNotContainsString('idp.internal.example', $response->render());
+	}
+
+	/**
+	 * Konfiguration ohne provider-url: dieselbe Antwort, die Ursache kommt hier
+	 * ins Protokoll, weil kein Abruf stattfand.
+	 */
+	public function testConfigWithoutProviderUrl(): void {
+		$this->client->method('getOpenIdConfig')->willReturn([]);
+		$this->client->method('getWellKnownConfig')->willThrowException(new OpenIDConnectClientException('The provider URL has not been set'));
+		$this->logger->expects(self::once())->method('warning')->with(self::stringContains('The provider URL has not been set'));
+		$this->logger->expects(self::never())->method('logException');
+
+		$response = $this->controller->config();
+
+		self::assertSame(Http::STATUS_SERVICE_UNAVAILABLE, $response->getStatus());
+		self::assertSame('temporarily_unavailable', $response->getData()['error']);
 	}
 }

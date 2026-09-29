@@ -156,6 +156,7 @@ standard ones:
 | `Configuration issue in openidconnect app` thrown on login | `openid-connect` config missing or unreadable. | Verify `config:list system` output and provider URL. |
 | `Self signed JWK header is not valid` | IdP issues self-signed JWK headers. | Set `jwt-self-signed-jwk-header-supported => true` if you trust the IdP. |
 | `Token cannot be verified` | Signature check failed (clock skew, wrong issuer, stale JWKS). | Check IdP `jwks_uri` reachability and server time sync. |
+| Page `Sign-in with the identity provider failed`, `/apps/openidconnect/config` answers `503`, Bearer requests get `401`, OIDC sessions end; log warning `OpenID Connect provider request failed: <method> <url>: <exception>: <message>` | The IdP could not be reached, answered with an error status or returned no usable discovery document. The warning names the URL and the cause. | Check DNS, firewall, proxy and TLS from the server to the IdP, e.g. `curl <provider-url>/.well-known/openid-configuration`. Requests to the IdP time out after 60 s. |
 | `User <id> is not unique` | Several local users share the same e-mail in `mode=email`. | Switch to `mode=userid` or de-duplicate the affected accounts. |
 | `User is from wrong user backend` | `allowed-user-backends` excludes the user's backend. | Add the backend class name or remove the restriction. |
 | Login loop on `/login` | `autoRedirectOnLoginPage` plus an IdP that bounces back without a session. | Disable `autoRedirectOnLoginPage` while debugging. |

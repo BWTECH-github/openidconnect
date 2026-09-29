@@ -76,7 +76,11 @@ class SessionVerifier {
 		// cache access token information
 		$exp = $this->getCache()->get($accessToken);
 		if ($exp !== null) {
-			$this->refreshToken($exp);
+			try {
+				$this->refreshToken($exp);
+			} catch (ProviderRequestException) {
+				$this->endSessionWithoutProvider();
+			}
 			return;
 		}
 
@@ -85,10 +89,25 @@ class SessionVerifier {
 			$this->getCache()->set($accessToken, $expiry);
 			/* @phan-suppress-next-line PhanTypeExpectedObjectPropAccess */
 			$this->refreshToken($expiry);
+		} catch (ProviderRequestException) {
+			$this->endSessionWithoutProvider();
 		} catch (\Exception $ex) {
 			$this->logout();
 			throw $ex;
 		}
+	}
+
+	/**
+	 * Der Anbieter kann das Zugriffstoken der Sitzung gerade weder bestätigen
+	 * noch erneuern: Sitzung beenden, aber nichts werfen. Die Ausnahme endete
+	 * beim Laden der App als HTTP 500 - bei fälliger Erneuerung auf jeder Seite,
+	 * bis der Anbieter wieder da war. So läuft die Anfrage als nicht angemeldet
+	 * weiter und führt zur Anmeldeseite. Die Ursache hat Client::fetchURL()
+	 * protokolliert.
+	 */
+	private function endSessionWithoutProvider(): void {
+		$this->logger->debug('OpenID Connect provider not available, ending the session');
+		$this->logout();
 	}
 
 	/**
@@ -100,6 +119,9 @@ class SessionVerifier {
 			$this->logger->debug('OIDC Logout: revoking access token');
 			$revokeData = $this->client->revokeToken($accessToken);
 			$this->logger->debug('Revocation info: ' . \json_encode($revokeData, JSON_THROW_ON_ERROR));
+		} catch (ProviderRequestException) {
+			// Ursache hat Client::fetchURL() protokolliert, kein Stacktrace dazu
+			$this->logger->debug('OIDC Logout: provider not available, access token not revoked');
 		} catch (OpenIDConnectClientException $ex) {
 			$this->logger->logException($ex);
 		}
@@ -111,6 +133,8 @@ class SessionVerifier {
 			$openIdConfig = $this->client->getOpenIdConfig();
 			$redirectUri = $openIdConfig['post_logout_redirect_uri'] ?? null;
 			$this->client->signOut($idToken, $redirectUri);
+		} catch (ProviderRequestException) {
+			$this->logger->debug('OIDC Logout: provider not available, no sign-out at the provider');
 		} catch (OpenIDConnectClientException $ex) {
 			$this->logger->logException($ex);
 		}

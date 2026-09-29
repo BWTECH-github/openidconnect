@@ -23,6 +23,10 @@
 
 namespace OCA\OpenIdConnect\Tests\Unit;
 
+use GuzzleHttp\Exception\ClientException;
+use GuzzleHttp\Exception\ConnectException;
+use GuzzleHttp\Psr7\Request;
+use GuzzleHttp\Psr7\Response;
 use JsonException;
 use Jumbojett\OpenIDConnectClientException;
 use OC\HintException;
@@ -30,6 +34,9 @@ use OC\Http\Client\ClientService;
 use OCA\OpenIdConnect\Client;
 use OCA\OpenIdConnect\Logger;
 use OCA\OpenIdConnect\SessionVerifier;
+use OCP\Http\Client\IClient;
+use OCP\Http\Client\IClientService;
+use OCP\Http\Client\IResponse;
 use OCP\ICache;
 use OCP\ICacheFactory;
 use OCP\IConfig;
@@ -268,5 +275,123 @@ class SessionVerifierTest extends TestCase {
 			->method('signOut')
 			->with($this->anything(), $expectedLogoutRedirectUri);
 		$this->sessionVerifier->afterLogout('dummy', 'dummy');
+	}
+
+	/**
+	 * SessionVerifier mit echtem Client; ohne $http scheitert der HTTP-Transport,
+	 * der Anbieter ist also nicht erreichbar.
+	 *
+	 * @return array{0: SessionVerifier, 1: MockObject|Logger, 2: MockObject|IClient}
+	 */
+	private function verifierWithProvider(?IClient $http = null): array {
+		$logger = $this->createMock(Logger::class);
+		$config = $this->createMock(IConfig::class);
+		$config->method('getAppValue')->willReturn(\json_encode([
+			'provider-url' => 'https://idp.example.invalid',
+			'client-id' => 'owncloud-client',
+			'client-secret' => 'secret',
+		]));
+		if ($http === null) {
+			$http = $this->createMock(IClient::class);
+			$http->method('get')->willThrowException(new ConnectException(
+				'cURL error 6: Could not resolve host: idp.example.invalid',
+				new Request('GET', 'https://idp.example.invalid/.well-known/openid-configuration')
+			));
+		}
+		$clientService = $this->createMock(IClientService::class);
+		$clientService->method('newClient')->willReturn($http);
+		$client = new Client($config, $this->createMock(IURLGenerator::class), $this->session, $logger, $clientService);
+		$verifier = new SessionVerifier($logger, $this->session, $this->userSession, $this->cacheFactory, $this->createMock(EventDispatcherInterface::class), $client);
+		return [$verifier, $logger, $http];
+	}
+
+	private function sessionWithTokens(): void {
+		$this->session->method('get')->willReturnMap([
+			['oca.openid-connect.session-id', null],
+			['oca.openid-connect.access-token', 'opaque-access-token'],
+			['oca.openid-connect.id-token', 'id-token'],
+			['oca.openid-connect.refresh-token', 'refresh-token'],
+		]);
+	}
+
+	/**
+	 * Das Zugriffstoken der Sitzung lässt sich nicht prüfen, weil der Anbieter
+	 * nicht erreichbar ist: Sitzung beenden, aber keine Ausnahme - die Anfrage
+	 * läuft als nicht angemeldet weiter und landet auf der Anmeldeseite.
+	 */
+	public function testUnreachableProviderDuringVerificationEndsSessionWithoutError(): void {
+		[$verifier, $logger] = $this->verifierWithProvider();
+		$this->sessionWithTokens();
+		$cache = $this->createMock(ICache::class);
+		$cache->method('get')->willReturn(null);
+		$cache->expects(self::never())->method('set');
+		$this->cacheFactory->method('create')->willReturn($cache);
+
+		$this->userSession->expects(self::once())->method('logout');
+		$logger->expects(self::once())->method('warning')->with(self::stringContains('Could not resolve host'));
+		$logger->expects(self::never())->method('logException');
+
+		$verifier->verifySession();
+	}
+
+	/**
+	 * Das Token läuft bald ab und soll erneuert werden, der Anbieter ist nicht
+	 * erreichbar: Bisher blieb die Sitzung stehen und jede Seite endete in
+	 * HTTP 500, bis der Anbieter wieder da war.
+	 */
+	public function testUnreachableProviderDuringRefreshEndsSessionWithoutError(): void {
+		[$verifier, $logger] = $this->verifierWithProvider();
+		$this->sessionWithTokens();
+		$cache = $this->createMock(ICache::class);
+		$cache->method('get')->willReturn(\time() + 60);
+		$this->cacheFactory->method('create')->willReturn($cache);
+
+		$this->userSession->expects(self::once())->method('logout');
+		$this->session->expects(self::never())->method('set');
+		$logger->expects(self::once())->method('warning')->with(self::stringContains('Could not resolve host'));
+		$logger->expects(self::never())->method('logException');
+
+		$verifier->verifySession();
+	}
+
+	/**
+	 * Der Anbieter ist erreichbar, lehnt das Refresh-Token aber ab (400
+	 * invalid_grant, etwa nach Widerruf): ebenfalls Sitzung beenden statt HTTP
+	 * 500 auf jeder Seite.
+	 */
+	public function testRefreshRejectedByProviderEndsSessionWithoutError(): void {
+		$discovery = $this->createMock(IResponse::class);
+		$discovery->method('getStatusCode')->willReturn(200);
+		$discovery->method('getBody')->willReturn('{"issuer":"https://idp.example.invalid","token_endpoint":"https://idp.example.invalid/token"}');
+		$http = $this->createMock(IClient::class);
+		$http->method('get')->willReturn($discovery);
+		$http->expects(self::once())->method('post')->with('https://idp.example.invalid/token')->willThrowException(new ClientException(
+			'Client error: `POST https://idp.example.invalid/token` resulted in a `400 Bad Request` response: {"error":"invalid_grant"}',
+			new Request('POST', 'https://idp.example.invalid/token'),
+			new Response(400, [], '{"error":"invalid_grant"}')
+		));
+		[$verifier, $logger] = $this->verifierWithProvider($http);
+		$this->sessionWithTokens();
+		$cache = $this->createMock(ICache::class);
+		$cache->method('get')->willReturn(\time() + 60);
+		$this->cacheFactory->method('create')->willReturn($cache);
+
+		$this->userSession->expects(self::once())->method('logout');
+		$this->session->expects(self::never())->method('set');
+		$logger->expects(self::once())->method('warning')->with(self::stringContains('400 Bad Request'));
+		$logger->expects(self::never())->method('logException');
+
+		$verifier->verifySession();
+	}
+
+	public function testAfterLogoutWithUnreachableProvider(): void {
+		[$verifier, $logger, $http] = $this->verifierWithProvider();
+		// Widerruf und Abmeldung beim Anbieter scheitern, aber nur ein Versuch
+		$http->expects(self::once())->method('get');
+		$logger->expects(self::once())->method('warning');
+		$logger->expects(self::never())->method('logException');
+		$this->session->expects(self::exactly(3))->method('remove');
+
+		$verifier->afterLogout('access-token', 'id-token');
 	}
 }

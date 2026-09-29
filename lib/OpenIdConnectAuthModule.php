@@ -106,6 +106,11 @@ class OpenIdConnectAuthModule implements IAuthModule {
 			}
 			$this->logger->debug('OpenIdConnectAuthModule::authToken : no user retrieved from token');
 			return null;
+		} catch (ProviderRequestException) {
+			// Der Anbieter kann das Token gerade nicht bestätigen: nicht angemeldet
+			// (401) statt HTTP 500. Die Ursache hat Client::fetchURL() protokolliert.
+			$this->logger->debug('OpenIdConnectAuthModule::authToken : provider not available, token not accepted');
+			return null;
 		} catch (OpenIDConnectClientException $ex) {
 			$this->logger->logException($ex);
 			return null;
