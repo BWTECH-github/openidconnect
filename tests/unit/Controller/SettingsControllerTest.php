@@ -121,4 +121,129 @@ class SettingsControllerTest extends TestCase {
 		$response = $this->controller->resetConfig();
 		self::assertSame('empty', $response->getData()['source']);
 	}
+
+	/**
+	 * Eine aus der Vorgängerinstanz übernommene config.php-Konfiguration trägt
+	 * Schlüssel, die das Formular nicht kennt. Das erste Speichern schreibt in
+	 * die App-Konfiguration, die config.php zählt danach nicht mehr - diese
+	 * Schlüssel dürfen dabei nicht verloren gehen.
+	 *
+	 * @return array das gespeicherte, dekodierte JSON
+	 */
+	private function saveOverSystemConfig(array $systemConfig, array $params): array {
+		$this->config->method('getAppValue')->willReturn(null);
+		$this->config->method('getSystemValue')->willReturn($systemConfig);
+		$this->request->method('getParams')->willReturn($params + [
+			'provider-url' => 'https://idp.example.test',
+			'client-id' => 'owncloud',
+			'client-secret' => 'secret',
+		]);
+		$saved = null;
+		$this->config->expects(self::once())
+			->method('setAppValue')
+			->with('openidconnect', 'openid-connect', self::callback(static function ($encoded) use (&$saved) {
+				$saved = \json_decode($encoded, true);
+				return true;
+			}));
+
+		$response = $this->controller->saveConfig();
+		self::assertSame(Http::STATUS_OK, $response->getStatus());
+		return $saved;
+	}
+
+	public function testSaveKeepsKeysTheFormDoesNotManage(): void {
+		$saved = $this->saveOverSystemConfig([
+			'provider-url' => 'https://old-idp.example.test',
+			'client-id' => 'old',
+			'client-secret' => 'old-secret',
+			'token-aud-check' => false,
+			'audience' => ['api://owncloud'],
+			'custom-key' => 'bleibt',
+		], []);
+
+		// was das Formular abbildet, kommt aus dem Formular
+		self::assertSame('https://idp.example.test', $saved['provider-url']);
+		self::assertSame('owncloud', $saved['client-id']);
+		// was es nicht abbildet, bleibt erhalten
+		self::assertFalse($saved['token-aud-check']);
+		self::assertSame(['api://owncloud'], $saved['audience']);
+		self::assertSame('bleibt', $saved['custom-key']);
+	}
+
+	public function testFormManagedKeyClearedInTheFormIsDropped(): void {
+		$saved = $this->saveOverSystemConfig([
+			'provider-url' => 'https://idp.example.test',
+			'client-id' => 'owncloud',
+			'client-secret' => 'secret',
+			'redirect-url' => 'https://old.example.test/redirect',
+		], ['redirect-url' => '']);
+
+		self::assertArrayNotHasKey('redirect-url', $saved);
+	}
+
+	public function testSaveKeepsUnknownAutoProvisionKeys(): void {
+		$saved = $this->saveOverSystemConfig([
+			'provider-url' => 'https://idp.example.test',
+			'client-id' => 'owncloud',
+			'client-secret' => 'secret',
+			'auto-provision' => ['enabled' => true, 'custom-sub-key' => 'bleibt'],
+		], ['auto-provision-enabled' => '0']);
+
+		self::assertFalse($saved['auto-provision']['enabled']);
+		self::assertSame('bleibt', $saved['auto-provision']['custom-sub-key']);
+	}
+
+	public function testLegacyRoutingClaimIsShownAndSavedUnderTheRightName(): void {
+		$this->config->method('getAppValue')->willReturn(null);
+		$this->config->method('getSystemValue')->willReturn([
+			'provider-url' => 'https://idp.example.test',
+			'client-id' => 'owncloud',
+			'client-secret' => 'secret',
+			'ocis-routing-poclicy-claim' => 'routing',
+		]);
+
+		$data = $this->controller->getConfig()->getData();
+		self::assertSame('routing', $data['config']['ocis-routing-policy-claim']);
+	}
+
+	public function testLegacyRoutingClaimIsNotCarriedAlongOnSave(): void {
+		$saved = $this->saveOverSystemConfig([
+			'provider-url' => 'https://idp.example.test',
+			'client-id' => 'owncloud',
+			'client-secret' => 'secret',
+			'ocis-routing-poclicy-claim' => 'routing',
+		], ['ocis-routing-policy-claim' => 'routing']);
+
+		self::assertSame('routing', $saved['ocis-routing-policy-claim']);
+		self::assertArrayNotHasKey('ocis-routing-poclicy-claim', $saved);
+	}
+
+	public function testSavingTwiceGivesTheSameResult(): void {
+		$system = [
+			'provider-url' => 'https://idp.example.test',
+			'client-id' => 'owncloud',
+			'client-secret' => 'secret',
+			'token-aud-check' => false,
+		];
+		$first = $this->saveOverSystemConfig($system, []);
+
+		// zweiter Lauf auf dem, was der erste gespeichert hat
+		$request = $this->createMock(IRequest::class);
+		$request->method('getParams')->willReturn([
+			'provider-url' => 'https://idp.example.test',
+			'client-id' => 'owncloud',
+			'client-secret' => 'secret',
+		]);
+		$config = $this->createMock(IConfig::class);
+		$config->method('getAppValue')->willReturn(\json_encode($first));
+		$second = null;
+		$config->expects(self::once())->method('setAppValue')
+			->with('openidconnect', 'openid-connect', self::callback(static function ($encoded) use (&$second) {
+				$second = \json_decode($encoded, true);
+				return true;
+			}));
+		(new SettingsController('openidconnect', $request, $config))->saveConfig();
+
+		self::assertSame($first, $second);
+	}
 }

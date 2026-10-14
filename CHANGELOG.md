@@ -4,6 +4,106 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
+## [3.0.2] - 2026-10-14
+
+Übernahme von main (2.4.8): die Einträge der main-Versionen 2.4.7 (2026-09-26)
+und 2.4.8 (2026-09-29).
+
+### Fixed
+
+- **Ein nicht erreichbarer Anbieter endete in HTTP 500 statt in einer
+  kontrollierten Antwort.** Der HTTP-Abruf der App reichte die rohe
+  Guzzle-Ausnahme durch; die Bibliothek wirft an dieser Stelle eine
+  `OpenIDConnectClientException`, und nur auf die sind die catch-Blöcke der App
+  gebaut. Dasselbe galt für Fehlerstatus des Anbieters (4xx/5xx). Jetzt kommt
+  eine `OpenIDConnectClientException`, und alle Wege antworten kontrolliert:
+  - `/index.php/apps/openidconnect/config` (Ziel von
+    `/.well-known/openid-configuration`): HTTP 503 mit
+    `{"error":"temporarily_unavailable","error_description":"The OpenID Connect provider is not available."}`
+    – auch wenn der Anbieter kein JSON-Objekt liefert (Fehlerseite eines
+    Proxys, leerer Body, JSON-Liste) oder keine `provider-url` gesetzt ist.
+    Desktop-, Android- und iOS-Client werten nur HTTP 200 aus und fallen wie
+    bisher bei 500 auf ihre Vorgaben zurück.
+  - Login-Knopf und Rückkehr vom Anbieter (Discovery, Token-, JWKS- und
+    Userinfo-Endpunkt): Fehlerseite „Sign-in with the identity provider
+    failed“ (HTTP 503) ohne interne Adressen. Ein Fehler am
+    Userinfo-Endpunkt wird jetzt wie einer beim Anmeldeschritt davor
+    behandelt, statt ungefangen durchzulaufen.
+  - `Authorization: Bearer …` an Seiten- und OCS-Routen: nicht angemeldet
+    (401) statt HTTP 500 beziehungsweise einer leeren Antwort mit HTTP 200 bei
+    OCS. WebDAV antwortete schon vorher mit 401.
+  - Angemeldete OIDC-Sitzungen: Ließ sich das Zugriffstoken beim Anbieter
+    nicht prüfen oder erneuern – Anbieter weg oder Refresh-Token dort
+    abgelehnt (`invalid_grant`) –, endete bei fälliger Erneuerung jede Seite in
+    HTTP 500, bis der Anbieter wieder antwortete. Jetzt wird die Sitzung
+    beendet und die Anmeldeseite erscheint; Widerruf und Abmeldung beim
+    Anbieter werden dabei nicht mehr mit Stacktrace protokolliert.
+
+  Die Ursache steht einmal je Anfrage als Warnung im Protokoll:
+  `OpenID Connect provider request failed: <Methode> <Adresse>: <Ausnahme>: <Meldung>`.
+  Bisher kamen dazu Fehlerzeilen mit vollständigem Stacktrace. War der
+  Anbieter in einer Anfrage schon nicht erreichbar (DNS, Verbindung,
+  Zeitüberschreitung), wird er in derselben Anfrage nicht noch einmal
+  angefragt.
+- **Anfragen an den Anbieter haben wieder eine Zeitgrenze.** Die Bibliothek
+  begrenzt sie auf 60 Sekunden, der Abruf über den HTTP-Client des Kerns hatte
+  keine Grenze: Ein Anbieter, der Pakete verwirft, hielt jede Anfrage bis zum
+  Verbindungs-Timeout des Systems fest.
+- **Ein nicht erreichbarer Anbieter gilt nicht als „kein
+  Introspection-Endpunkt“.** Weil Abruffehler jetzt als
+  `OpenIDConnectClientException` kommen, hätte die Probe auf einen
+  Introspection-Endpunkt sie als „keiner vorhanden“ gelesen und ein
+  undurchsichtiges Token über den Userinfo-Endpunkt geprüft – ohne
+  Audience-Prüfung. Die Probe gibt den Abruffehler deshalb weiter, das Token
+  wird abgewiesen.
+- **Nach einem Umzug von Server-Version 10 lehnte die Audience-Prüfung die Token
+  vieler Anbieter ab.** Bis upstream 2.3.4 gab es keine Prüfung und damit auch
+  keinen Konfigurationsschlüssel dafür. Seit 2.4.6 musste bei einem JWT die
+  `client-id` in `aud` stehen – Keycloak schreibt dort aber `account` oder
+  nichts, Entra ID v1.0 die App-ID-URI, AD FS
+  `microsoft:identityserver:<Kennung>`. Eine unverändert übernommene
+  Konfiguration verlor damit jede Anmeldung. Jetzt gilt dieselbe Regel wie
+  upstream 2.3.5/2.4.2 (#374): Passt `aud` nicht, entscheidet der ranghöchste
+  vorhandene Claim aus `azp`, `appid`, `client_id` – er muss die `client-id`
+  nennen. Ein Token eines anderen Clients bleibt abgewiesen (OC10-115,
+  OC10-147); gilt jetzt für JWT und Introspection gleich.
+- **Der Schlüssel `audience` aus upstream 2.3.5/2.4.2 wurde ignoriert.** Eine
+  übernommene Konfiguration, die ihn setzt, prüfte hier gegen die `client-id`
+  und wies die Token ab. `audience` (String oder Liste) ersetzt jetzt wie
+  upstream die `client-id` als erwartetes Publikum und schaltet den Weg über
+  `azp`/`appid`/`client_id` ab; ein unbrauchbarer Wert weist alles ab und
+  meldet das einmal als Warnung. `token-aud-check => false` schaltet weiterhin
+  alles ab. Die Fehlermeldung lautet jetzt
+  `Token audience does not match the expected audience`.
+- **Das Speichern im Einstellungsformular verwarf Schlüssel, die das Formular
+  nicht kennt.** Beim ersten Speichern wandert die Konfiguration aus der
+  `config.php` in die App-Konfiguration, die `config.php` zählt danach nicht
+  mehr. `token-aud-check`, `audience` und alle anderen nicht abgebildeten
+  Schlüssel (auch unter `auto-provision`) gingen dabei still verloren. Sie
+  bleiben jetzt erhalten.
+- **`ocis-routing-poclicy-claim` aus 2.1.x/2.2.x wird wieder gelesen.** Die
+  Versionen lasen den Schlüssel mit Tippfehler (upstream #289, behoben in
+  2.3.0). Eine übernommene Konfiguration mit dieser Schreibweise gilt weiter,
+  die richtige hat Vorrang; das Formular zeigt den Wert im richtigen Feld und
+  speichert ihn unter dem richtigen Namen.
+
+### Bekannte Verhaltensänderung bei Umzügen von 1.0.0 bis 2.1.x
+
+- **`use-token-introspection-endpoint` wird nicht mehr ausgewertet – wie
+  upstream seit 2.2.0.** In 1.0.0 bis 2.1.1 hat der Schalter jedes Token beim
+  Anbieter per Introspection prüfen lassen, auch JWTs, über Bearer-Auth wie
+  über die Browser-Sitzung; ein beim Anbieter widerrufenes Token wurde damit
+  sofort abgelehnt. Jetzt wird ein JWT lokal gegen die Schlüssel des
+  Anbieters (JWKS) geprüft und gilt bis zu seinem `exp`, auch wenn es beim
+  Anbieter schon widerrufen ist; nur undurchsichtige Token gehen an die
+  Introspection. Die Instanz braucht dafür Zugriff auf den JWKS-Endpunkt des
+  Anbieters. Der Schlüssel bleibt in der übernommenen Konfiguration stehen,
+  wirkt aber nicht. Wer schnellen Widerruf braucht, stellt am Anbieter eine
+  kurze Lebensdauer für Zugriffstoken ein. Bewusst nicht wieder eingeführt:
+  Wer von 2.2.0 oder neuer umzieht, hat den Schlüssel oft noch als Altlast in
+  der Konfiguration, und er würde dort unvermittelt jede Anfrage an den
+  Anbieter binden.
+
 ## [3.0.1] - 2026-09-21
 
 ### Security

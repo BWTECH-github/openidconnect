@@ -24,6 +24,8 @@
 
 namespace OCA\OpenIdConnect\Tests\Unit;
 
+use GuzzleHttp\Exception\ConnectException;
+use GuzzleHttp\Psr7\Request;
 use Jumbojett\OpenIDConnectClientException;
 use OC\Memcache\ArrayCache;
 use OC\User\LoginException;
@@ -31,6 +33,7 @@ use OCA\OpenIdConnect\Client;
 use OCA\OpenIdConnect\OpenIdConnectAuthModule;
 use OCA\OpenIdConnect\Service\AutoProvisioningService;
 use OCA\OpenIdConnect\Service\UserLookupService;
+use OCP\Http\Client\IClient;
 use OCP\Http\Client\IClientService;
 use OCP\ICacheFactory;
 use OCP\IConfig;
@@ -234,5 +237,58 @@ class OpenIdConnectAuthModuleTest extends TestCase {
 		$this->autoProvisioningService->expects(self::once())->method('updateAccountInfo')->with($user, $userInfo)->willReturnCallback(function () {
 		});
 		$this->authModule->auth($request);
+	}
+
+	public function providesBearerTokens(): array {
+		$b64 = static fn (string $s): string => \rtrim(\strtr(\base64_encode($s), '+/', '-_'), '=');
+		return [
+			// undurchsichtig: die Introspection-Probe fragt die Discovery ab
+			'opaque token' => ['muell-token-123'],
+			// JWT ohne eingebetteten Schlüssel: die Signaturprüfung holt die JWKS über die Discovery
+			'jwt' => [$b64('{"alg":"RS256","kid":"k1"}') . '.' . $b64('{"sub":"anna","exp":4102444800}') . '.' . $b64('sig')],
+		];
+	}
+
+	/**
+	 * Der Anbieter ist nicht erreichbar: Das Token lässt sich nicht prüfen, die
+	 * Anfrage ist nicht angemeldet (401 im Kern) - kein HTTP 500, kein
+	 * Stacktrace im Protokoll. Echter Client, nur der HTTP-Transport scheitert.
+	 *
+	 * @dataProvider providesBearerTokens
+	 * @throws LoginException
+	 */
+	public function testBearerTokenWithUnreachableProviderIsNotAuthenticated(string $token): void {
+		$config = $this->createMock(IConfig::class);
+		$config->method('getAppValue')->willReturn(\json_encode([
+			'provider-url' => 'https://idp.example.invalid',
+			'client-id' => 'owncloud-client',
+			'client-secret' => 'secret',
+		]));
+		$http = $this->createMock(IClient::class);
+		$http->method('get')->willThrowException(new ConnectException(
+			'cURL error 6: Could not resolve host: idp.example.invalid',
+			new Request('GET', 'https://idp.example.invalid/.well-known/openid-configuration')
+		));
+		$clientService = $this->createMock(IClientService::class);
+		$clientService->method('newClient')->willReturn($http);
+		$client = new Client($config, $this->createMock(IURLGenerator::class), $this->createMock(ISession::class), $this->logger, $clientService);
+		$this->cacheFactory->method('create')->willReturn(new ArrayCache());
+		$this->lookupService->expects(self::never())->method('lookupUser');
+		$authModule = new OpenIdConnectAuthModule(
+			$this->createMock(IUserManager::class),
+			$this->logger,
+			$this->cacheFactory,
+			$this->lookupService,
+			$client,
+			$this->autoProvisioningService
+		);
+		$request = $this->createMock(IRequest::class);
+		$request->method('getHeader')->willReturn("Bearer $token");
+
+		$this->logger->expects(self::once())->method('warning')->with(self::stringContains('Could not resolve host'));
+		$this->logger->expects(self::never())->method('error');
+		$this->logger->expects(self::never())->method('logException');
+
+		self::assertNull($authModule->auth($request));
 	}
 }

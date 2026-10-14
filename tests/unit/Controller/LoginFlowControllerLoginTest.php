@@ -29,6 +29,7 @@ use OC\User\LoginException;
 use OC\User\Session;
 use OCA\OpenIdConnect\Client;
 use OCA\OpenIdConnect\Controller\LoginFlowController;
+use OCA\OpenIdConnect\ProviderRequestException;
 use OCA\OpenIdConnect\Service\AccountLoginException;
 use OCA\OpenIdConnect\Service\AutoProvisioningService;
 use OCA\OpenIdConnect\Service\UserLookupService;
@@ -117,6 +118,57 @@ class LoginFlowControllerLoginTest extends TestCase {
 		$this->client->method('authenticate')->willThrowException(new OpenIDConnectClientException('foo'));
 		$this->expectException(HintException::class);
 		$this->expectExceptionMessage('Error in OpenIdConnect:foo');
+
+		$this->controller->login();
+	}
+
+	public function providesProviderFailures(): array {
+		$unreachable = new ProviderRequestException(new \RuntimeException('cURL error 6: Could not resolve host: idp.internal.example'));
+		return [
+			// Klick auf den Login-Knopf: authorization_endpoint aus der Discovery
+			'authenticate' => [$unreachable, null],
+			// Rückkehr vom Anbieter: Userinfo-Endpunkt
+			'user info' => [null, $unreachable],
+		];
+	}
+
+	/**
+	 * Anbieter nicht erreichbar: kontrollierte Fehlerseite (HintException ->
+	 * 503 im Kern) statt HTTP 500, ohne interne Adressen und ohne Stacktrace im
+	 * Protokoll - die Ursache hat Client::fetchURL() schon protokolliert.
+	 *
+	 * @dataProvider providesProviderFailures
+	 */
+	public function testLoginWithUnavailableProvider(?\Exception $onAuthenticate, ?\Exception $onUserInfo): void {
+		$this->client->method('getOpenIdConfig')->willReturn([]);
+		if ($onAuthenticate !== null) {
+			$this->client->method('authenticate')->willThrowException($onAuthenticate);
+		}
+		if ($onUserInfo !== null) {
+			$this->client->method('getUserInfo')->willThrowException($onUserInfo);
+		}
+		$this->userLookup->expects(self::never())->method('lookupUser');
+		$this->logger->expects(self::never())->method('logException');
+		$this->logger->expects(self::never())->method('error');
+
+		try {
+			$this->controller->login();
+			self::fail('expected a HintException');
+		} catch (HintException $ex) {
+			self::assertSame('Sign-in with the identity provider failed', $ex->getMessage());
+			self::assertStringNotContainsString('idp.internal.example', $ex->getMessage() . $ex->getHint());
+		}
+	}
+
+	/**
+	 * Userinfo-Endpunkt antwortet, aber unbrauchbar (Bibliotheksfehler): wie beim
+	 * Anmeldeschritt davor eine Fehlerseite statt HTTP 500.
+	 */
+	public function testLoginUserInfoClientExceptionIsReported(): void {
+		$this->client->method('getOpenIdConfig')->willReturn([]);
+		$this->client->method('getUserInfo')->willThrowException(new OpenIDConnectClientException('Invalid JWT signature'));
+		$this->expectException(HintException::class);
+		$this->expectExceptionMessage('Error in OpenIdConnect:Invalid JWT signature');
 
 		$this->controller->login();
 	}
@@ -359,5 +411,37 @@ class LoginFlowControllerLoginTest extends TestCase {
 
 		$headers = $response->getHeaders();
 		self::assertEquals('owncloud-selector=ocis;path=/;', $headers['Set-Cookie']);
+	}
+
+	public function providesRoutingClaimConfig(): array {
+		return [
+			// Schreibweise aus openidconnect 2.1.x/2.2.x (upstream #289)
+			'alter Schlüssel mit Tippfehler' => [['ocis-routing-poclicy-claim' => 'routing'], 'ocis'],
+			// die richtige Schreibweise hat Vorrang
+			'beide Schreibweisen' => [['ocis-routing-poclicy-claim' => 'routing', 'ocis-routing-policy-claim' => 'ocis.routing.policy'], 'oc10'],
+		];
+	}
+
+	/**
+	 * @dataProvider providesRoutingClaimConfig
+	 */
+	public function testLoginRoutingClaimFromPredecessorConfig(array $config, string $expectedCookieValue): void {
+		$this->client->method('getOpenIdConfig')->willReturn($config);
+		$this->client->method('getUserInfo')->willReturn((object)[
+			'email' => 'foo@exmaple.net',
+			'routing' => 'ocis',
+			'ocis.routing.policy' => 'oc10',
+		]);
+		$this->client->method('getIdToken')->willReturn('id');
+		$this->client->method('getAccessToken')->willReturn('access');
+		$this->client->method('getRefreshToken')->willReturn('refresh');
+		$user = $this->createMock(IUser::class);
+		$this->userLookup->method('lookupUser')->willReturn($user);
+		$this->userSession->method('createSessionToken')->willReturn(true);
+		$this->userSession->method('loginUser')->willReturn(true);
+
+		$response = $this->controller->login();
+
+		self::assertEquals("owncloud-selector=$expectedCookieValue;path=/;", $response->getHeaders()['Set-Cookie']);
 	}
 }

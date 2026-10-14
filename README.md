@@ -91,10 +91,17 @@ $CONFIG = [
 | `use-access-token-payload-for-user-info` | bool | Use the JWT payload instead of `userinfo`. |
 | `use-access-token-introspection-for-user-info` | bool | Use introspection results as the user-info source. |
 | `jwt-self-signed-jwk-header-supported` | bool | Allow self-signed JWK headers. |
-| `token-aud-check` | bool | **On by default.** The access token must name this relying party, so a token the same issuer minted for another client is rejected (OC10-115, OC10-147). For a JWT that means the configured `client-id` has to appear in `aud`; for an opaque token the introspection response has to carry a matching `client_id` (RFC 7662 §2.2), with `aud` as the fallback — which is why an IdP that puts a resource name into `aud` (Keycloak writes `account`, Okta `api://default`) still works. Set to `false` only for an IdP that can neither be fixed nor name this instance: that reopens both findings. |
+| `token-aud-check` | bool | **On by default.** The access token must name this relying party, so a token the same issuer minted for another client is rejected (OC10-115, OC10-147). The token is accepted when `aud` contains the expected audience (the `client-id`, or `audience` below); failing that, when the most authoritative client-naming claim it carries — `azp`, then `appid`, then `client_id` (RFC 7662 §2.2) — equals the `client-id`. That is why an IdP that puts a resource name into `aud` or leaves it out (Keycloak writes `account` or nothing, Entra ID v1.0 the App ID URI, AD FS `microsoft:identityserver:…`) keeps working, including configurations taken over from server version 10. Set to `false` only for an IdP that can neither be fixed nor name this instance: that reopens both findings. |
+| `audience` | string or list | Optional, same key as upstream openidconnect 2.3.5/2.4.2. The value(s) the provider sends in `aud`; they **replace** the `client-id` as the expected audience and switch the `azp`/`appid`/`client_id` fallback off. Only set it to a value that only this instance can be issued a token for. An empty string or list rejects every token. |
 | `ocis-routing-policy-claim` | string | User-info claim that drives the routing-policy cookie. |
 | `ocis-routing-policy-cookie` | string | Cookie name (default `owncloud-selector`). |
 | `ocis-routing-policy-cookie-directives` | string | Cookie directives (default `path=/;`). |
+
+`use-token-introspection-endpoint` from openidconnect 1.0.0–2.1.x is not
+evaluated any more, as upstream since 2.2.0: a JWT is verified locally against
+the provider's JWKS and stays valid until its `exp`, even if the provider has
+revoked it; only opaque tokens are sent to introspection. Configurations taken
+over from those versions keep the key, but it has no effect.
 
 ### Auto provisioning
 
@@ -164,6 +171,7 @@ standard ones:
 | `Configuration issue in openidconnect app` thrown on login | `openid-connect` config missing or unreadable. | Verify `config:list system` output and provider URL. |
 | `Self signed JWK header is not valid` | IdP issues self-signed JWK headers. | Set `jwt-self-signed-jwk-header-supported => true` if you trust the IdP. |
 | `Token cannot be verified` | Signature check failed (clock skew, wrong issuer, stale JWKS). | Check IdP `jwks_uri` reachability and server time sync. |
+| Page `Sign-in with the identity provider failed`, `/apps/openidconnect/config` answers `503`, Bearer requests get `401`, OIDC sessions end; log warning `OpenID Connect provider request failed: <method> <url>: <exception>: <message>` | The IdP could not be reached, answered with an error status or returned no usable discovery document. The warning names the URL and the cause. | Check DNS, firewall, proxy and TLS from the server to the IdP, e.g. `curl <provider-url>/.well-known/openid-configuration`. Requests to the IdP time out after 60 s. |
 | Page "The login with your external account did not work" | See the `OpenID::login:` warning in the log: `no account matches the identity` (create the account or enable auto provisioning), `several accounts match the identity` (de-duplicate e-mails or use `mode=userid`), `... not in allowed-user-backends (<class>)`, `the configured claim is missing in the user info (<claim>)` (fix `search-attribute`), `the claim or value required for auto provisioning is missing (<claim>)`, `creating the account failed`. | As named in the log line. |
 | Login ends on the start page instead of the requested page | owncloud.online 11.1 core with openidconnect older than 3.0.0 (the core no longer evaluates `redirect_url` for the default page). | Update to 3.0.0. |
 | Login loop on `/login` | `autoRedirectOnLoginPage` plus an IdP that bounces back without a session. | Disable `autoRedirectOnLoginPage` while debugging. |
