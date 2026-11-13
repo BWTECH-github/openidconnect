@@ -86,6 +86,20 @@ class LoginPageBehaviourTest extends TestCase {
 		$this->loginPageBehaviour->handleLoginPageBehaviour(['autoRedirectOnLoginPage' => true]);
 	}
 
+	/**
+	 * Rückweg der Fehlerseite: mit direct=1 bleibt die Anmeldeseite stehen.
+	 */
+	public function testNotLoggedInAutoRedirectDirectLogin(): void {
+		$this->userSession->method('isLoggedIn')->willReturn(false);
+		$this->request->method('getMethod')->willReturn('GET');
+		$this->request->method('getRequestUri')->willReturn('https://example.com/login?direct=1');
+		$this->request->method('getParam')->with('direct')->willReturn('1');
+		$this->urlGenerator->method('linkToRoute')->willReturn('https://example.com/openid/redirect');
+		$this->loginPageBehaviour->expects(self::once())->method('registerAlternativeLogin');
+		$this->loginPageBehaviour->expects(self::never())->method('redirect');
+		$this->loginPageBehaviour->handleLoginPageBehaviour(['autoRedirectOnLoginPage' => true]);
+	}
+
 	public function testNotLoggedInAutoRedirectNoLoginPage(): void {
 		$this->userSession->method('isLoggedIn')->willReturn(false);
 		$this->request->method('getMethod')->willReturn('GET');

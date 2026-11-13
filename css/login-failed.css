@@ -1,0 +1,19 @@
+/**
+ * Fehlerseite der Anmeldung über OpenID Connect (templates/login-failed.php).
+ * Gestalt und Maße des Hauptknopfs kommen aus der Anmeldekarte des Kerns
+ * (.login-button); hier nur, was ein Verweis statt eines <button> braucht:
+ * Text mittig in der Fläche, ohne Unterstrich.
+ *
+ * @copyright Copyright (c) 2026, BW-Tech GmbH
+ * @license GPL-2.0
+ */
+#body-login #openidconnect-back-to-login {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	text-decoration: none;
+}
+
+#body-login .openidconnect-login-failed-logout {
+	margin: 12px 0 0;
+}

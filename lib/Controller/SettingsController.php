@@ -17,6 +17,7 @@ use OCA\OpenIdConnect\Application;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http;
 use OCP\AppFramework\Http\JSONResponse;
+use OCP\ICacheFactory;
 use OCP\IConfig;
 use OCP\IL10N;
 use OCP\IRequest;
@@ -80,6 +81,7 @@ class SettingsController extends Controller {
 		IRequest $request,
 		private readonly IConfig $config,
 		private ?IL10N $l10n = null,
+		private ?ICacheFactory $cacheFactory = null,
 	) {
 		parent::__construct($appName, $request);
 	}
@@ -89,6 +91,13 @@ class SettingsController extends Controller {
 			$this->l10n = \OC::$server->getL10N(Application::APPID);
 		}
 		return $this->l10n;
+	}
+
+	private function cacheFactory(): ICacheFactory {
+		if ($this->cacheFactory === null) {
+			$this->cacheFactory = \OC::$server->getMemCacheFactory();
+		}
+		return $this->cacheFactory;
 	}
 
 	public function getConfig() {
@@ -102,6 +111,14 @@ class SettingsController extends Controller {
 	}
 
 	public function saveConfig() {
+		// Ohne verteilten Cache bliebe OpenID Connect nach dem Speichern aus
+		// (Application::boot()); die Seite meldete trotzdem "gespeichert".
+		if (!$this->cacheFactory()->isAvailable()) {
+			return new JSONResponse([
+				'status' => 'error',
+				'message' => $this->l10n()->t('OpenID Connect needs a distributed memory cache (memcache.distributed in config.php). The configuration was not saved.'),
+			], Http::STATUS_BAD_REQUEST);
+		}
 		try {
 			$config = $this->buildConfig($this->request->getParams());
 		} catch (\InvalidArgumentException $e) {

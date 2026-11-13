@@ -7,16 +7,25 @@
 
 namespace OCA\OpenIdConnect\Settings;
 
+use OCP\ICacheFactory;
 use OCP\Settings\ISettings;
 use OCP\Template;
 use OCP\Util;
 
 class AdminPanel implements ISettings {
+	public function __construct(
+		private readonly ICacheFactory $cacheFactory,
+	) {
+	}
+
 	public function getPanel() {
 		Util::addScript('openidconnect', 'admin');
 		Util::addStyle('openidconnect', 'admin');
 
-		return new Template('openidconnect', 'admin');
+		$template = new Template('openidconnect', 'admin');
+		// Ohne verteilten Cache bleibt OpenID Connect aus (Application::boot()).
+		$template->assign('cacheMissing', !$this->cacheFactory->isAvailable());
+		return $template;
 	}
 
 	public function getSectionID() {

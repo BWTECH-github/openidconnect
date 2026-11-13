@@ -61,6 +61,11 @@ class LoginPageBehaviour {
 		if (!$autoRedirectOnLoginPage) {
 			return;
 		}
+		// Rückweg der Fehlerseite (login-failed.php): die Anmeldung mit
+		// Kennwort bleibt erreichbar, auch wenn der Anbieter ausfällt.
+		if ((string)$this->request->getParam('direct') === '1') {
+			return;
+		}
 
 		$req = $this->request->getRequestUri();
 		$this->logger->debug("Redirecting to IdP - request url: $req");

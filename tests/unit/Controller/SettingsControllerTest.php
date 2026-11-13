@@ -9,6 +9,7 @@ namespace OCA\OpenIdConnect\Tests\Unit\Controller;
 
 use OCA\OpenIdConnect\Controller\SettingsController;
 use OCP\AppFramework\Http;
+use OCP\ICacheFactory;
 use OCP\IConfig;
 use OCP\IRequest;
 use PHPUnit\Framework\MockObject\MockObject;
@@ -27,7 +28,28 @@ class SettingsControllerTest extends TestCase {
 
 		$this->request = $this->createMock(IRequest::class);
 		$this->config = $this->createMock(IConfig::class);
-		$this->controller = new SettingsController('openidconnect', $this->request, $this->config);
+		$this->controller = new SettingsController('openidconnect', $this->request, $this->config, null, $this->cacheFactory(true));
+	}
+
+	private function cacheFactory(bool $available): ICacheFactory {
+		$factory = $this->createMock(ICacheFactory::class);
+		$factory->method('isAvailable')->willReturn($available);
+		return $factory;
+	}
+
+	public function testSaveConfigIsRejectedWithoutDistributedCache(): void {
+		$this->request->method('getParams')->willReturn([
+			'provider-url' => 'https://idp.example.test',
+			'client-id' => 'client',
+			'client-secret' => 'secret',
+		]);
+		$this->config->expects(self::never())->method('setAppValue');
+		$controller = new SettingsController('openidconnect', $this->request, $this->config, null, $this->cacheFactory(false));
+
+		$response = $controller->saveConfig();
+
+		self::assertSame(Http::STATUS_BAD_REQUEST, $response->getStatus());
+		self::assertSame('error', $response->getData()['status']);
 	}
 
 	public function testGetConfigUsesAppConfig(): void {
@@ -242,7 +264,7 @@ class SettingsControllerTest extends TestCase {
 				$second = \json_decode($encoded, true);
 				return true;
 			}));
-		(new SettingsController('openidconnect', $request, $config))->saveConfig();
+		(new SettingsController('openidconnect', $request, $config, null, $this->cacheFactory(true)))->saveConfig();
 
 		self::assertSame($first, $second);
 	}

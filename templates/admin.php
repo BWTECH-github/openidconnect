@@ -16,6 +16,9 @@
 ?>
 <div class="section" id="openidconnect-admin">
 	<h2><?php p($l->t('OpenID Connect')); ?></h2>
+	<?php if ($_['cacheMissing']): ?>
+	<p class="warning" id="openidconnect-cache-missing"><?php p($l->t('OpenID Connect needs a distributed memory cache (memcache.distributed in config.php). Until it is set up, sign-in via OpenID Connect stays off.')); ?></p>
+	<?php endif; ?>
 	<p class="openidconnect-config-source">
 		<?php p($l->t('Configuration source')); ?>:
 		<strong id="openidconnect-config-source">-</strong>
@@ -28,7 +31,7 @@
 		<?php p($l->t('Required fields. The configuration is saved as app configuration and overrides config.php.')); ?>
 	</p>
 
-	<form id="openidconnect-admin-form">
+	<form id="openidconnect-admin-form" novalidate>
 		<fieldset>
 			<legend><?php p($l->t('Identity Provider')); ?></legend>
 			<?php /* Der Stern hinter dem Feldnamen ist nur die sichtbare Wiederholung des
@@ -190,8 +193,8 @@
 		</fieldset>
 
 		<p class="openidconnect-actions">
-			<button type="submit" class="button primary oco-btn-primary" id="openidconnect-save"><?php p($l->t('Save')); ?></button>
 			<button type="button" class="button" id="openidconnect-reset-appconfig"><?php p($l->t('Use system config')); ?></button>
+			<button type="submit" class="button primary oco-btn-primary" id="openidconnect-save"><?php p($l->t('Save')); ?></button>
 			<span id="openidconnect-message" class="msg" role="status" aria-live="polite"></span>
 		</p>
 

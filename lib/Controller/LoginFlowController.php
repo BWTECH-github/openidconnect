@@ -125,7 +125,7 @@ class LoginFlowController extends Controller {
 			$openid->storeRedirectUrl($this->request->getParam('redirect_url'));
 			$openid->authenticate();
 		} catch (OpenIDConnectClientException $ex) {
-			throw $this->signInFailed($ex);
+			return $this->signInFailed($openid, $ex);
 		}
 		// Never log raw tokens — a debug log otherwise becomes a store of live
 		// bearer/refresh credentials. Log only their presence.
@@ -139,7 +139,7 @@ class LoginFlowController extends Controller {
 		try {
 			$userInfo = $openid->getUserInfo();
 		} catch (OpenIDConnectClientException $ex) {
-			throw $this->signInFailed($ex);
+			return $this->signInFailed($openid, $ex);
 		}
 		// Log only the claim names, not their (personally identifiable) values.
 		$this->logger->debug('User info claims: ' . \json_encode($userInfo ? \array_keys((array)$userInfo) : []));
@@ -262,22 +262,19 @@ class LoginFlowController extends Controller {
 	}
 
 	/**
-	 * Die Fehlerseite für einen gescheiterten Anmeldeschritt beim Anbieter
-	 * (HintException, im Kern HTTP 503).
+	 * Die Fehlerseite für einen gescheiterten Anmeldeschritt beim Anbieter,
+	 * Status 503. Früher eine HintException des Kerns: englischer Text ohne
+	 * Rückweg, bei Bibliotheksfehlern roh "Error in OpenIdConnect:" samt
+	 * Ausnahmetext. Jetzt dieselbe übersetzte Seite wie bei fehlendem Konto,
+	 * mit Rückweg zur Anmeldung.
 	 */
-	private function signInFailed(OpenIDConnectClientException $ex): HintException {
-		if ($ex instanceof ProviderRequestException) {
-			// Ursache samt Adresse hat Client::fetchURL() schon protokolliert; die
-			// Seite nennt nichts davon.
-			return new HintException(
-				'Sign-in with the identity provider failed',
-				'The identity provider could not be reached or rejected the request. Please try again later or contact your administrator.',
-				0,
-				$ex
-			);
+	private function signInFailed(Client $openid, OpenIDConnectClientException $ex): TemplateResponse {
+		// Bei ProviderRequestException hat Client::fetchURL() die Ursache samt
+		// Adresse schon protokolliert; die Seite nennt nichts davon.
+		if (!$ex instanceof ProviderRequestException) {
+			$this->logger->logException($ex);
 		}
-		$this->logger->logException($ex);
-		return new HintException('Error in OpenIdConnect:' . $ex->getMessage());
+		return $this->loginFailedResponse($openid, 'provider', Http::STATUS_SERVICE_UNAVAILABLE);
 	}
 
 	/**
@@ -314,22 +311,27 @@ class LoginFlowController extends Controller {
 	}
 
 	/**
-	 * Seite "Anmeldung hat nicht geklappt" in der Gastansicht, Status 403.
+	 * Seite "Anmeldung hat nicht geklappt" in der Gastansicht: Grund "account"
+	 * (kein passendes Konto, Status 403) oder "provider" (Anbieter nicht
+	 * erreichbar oder Antwort unbrauchbar, Status 503).
 	 *
 	 * Ohne Anbieternamen: das Feld loginButtonName ist die Beschriftung des
 	 * Knopfs ("Login via OpenID Connect", "Mit Firmenkonto anmelden") und
 	 * ergab im Satz Unsinn.
 	 *
-	 * Der Rückweg zur Anmeldung fehlt, wenn die Anmeldeseite sofort zum
-	 * Anbieter weiterleitet - dort ginge es nur im Kreis. Solange die Sitzung
-	 * beim Anbieter besteht, meldet er dasselbe Konto sofort wieder an; nennt
-	 * er eine Abmeldeadresse, bietet die Seite die Abmeldung dort an.
+	 * Leitet die Anmeldeseite sofort zum Anbieter weiter, führt der Rückweg
+	 * auf die Anmeldeseite mit direct=1 (LoginPageBehaviour leitet dann nicht
+	 * weiter) - sonst ginge es im Kreis, und fällt der Anbieter aus, wäre
+	 * auch die Verwaltung ausgesperrt. Solange die Sitzung beim Anbieter
+	 * besteht, meldet er dasselbe Konto sofort wieder an; nennt er eine
+	 * Abmeldeadresse, bietet die Seite die Abmeldung dort an. Ist der
+	 * Anbieter nicht erreichbar, wird er nicht noch einmal gefragt.
 	 */
-	private function loginFailedResponse(Client $openid): TemplateResponse {
+	private function loginFailedResponse(Client $openid, string $reason = 'account', int $status = Http::STATUS_FORBIDDEN): TemplateResponse {
 		$openIdConfig = $openid->getOpenIdConfig() ?? [];
 		$autoRedirect = (bool)($openIdConfig['autoRedirectOnLoginPage'] ?? false);
 		$providerLogoutUrl = '';
-		$endpoint = $openid->getEndSessionEndpoint();
+		$endpoint = $reason === 'account' ? $openid->getEndSessionEndpoint() : null;
 		if ($endpoint !== null) {
 			$params = ['client_id' => (string)($openIdConfig['client-id'] ?? '')];
 			$nachAbmeldung = (string)($openIdConfig['post_logout_redirect_uri'] ?? '');
@@ -339,10 +341,11 @@ class LoginFlowController extends Controller {
 			$providerLogoutUrl = $endpoint . (\strpos($endpoint, '?') === false ? '?' : '&') . \http_build_query($params);
 		}
 		$response = new TemplateResponse($this->appName, 'login-failed', [
-			'loginUrl' => $autoRedirect ? '' : \OC::$server->getURLGenerator()->linkToRoute('core.login.showLoginForm'),
+			'reason' => $reason,
+			'loginUrl' => \OC::$server->getURLGenerator()->linkToRoute('core.login.showLoginForm', $autoRedirect ? ['direct' => 1] : []),
 			'providerLogoutUrl' => $providerLogoutUrl,
 		], 'guest');
-		$response->setStatus(Http::STATUS_FORBIDDEN);
+		$response->setStatus($status);
 		return $response;
 	}
 

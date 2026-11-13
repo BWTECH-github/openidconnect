@@ -26,7 +26,6 @@ require_once __DIR__ . '/bootstrap.php';
 
 use Jumbojett\OpenIDConnectClientException;
 use OC;
-use OC\HintException;
 use OCP\AppFramework\App;
 
 class Application extends App {
@@ -43,7 +42,6 @@ class Application extends App {
 
 	/**
 	 * @throws OpenIDConnectClientException
-	 * @throws HintException
 	 * @codeCoverageIgnore
 	 */
 	public function boot(): void {
@@ -58,7 +56,20 @@ class Application extends App {
 
 		$memCacheFactory = $server->getMemCacheFactory();
 		if (!OC::$CLI && !$memCacheFactory->isAvailable()) {
-			throw new HintException('A real distributed mem cache setup is required');
+			// Ohne verteilten Cache lassen sich Sitzungen nicht gegen den Anbieter
+			// prüfen. Früher warf boot() hier eine HintException: jede Seite der
+			// Weboberfläche antwortete 503, auch Anmeldung und Verwaltung - zurück
+			// ging es nur mit occ. Jetzt bleibt OpenID Connect für die Anfrage aus,
+			// die Anmeldung mit Kennwort geht weiter. Eine über OpenID Connect
+			// angemeldete Sitzung endet, weil sie sich nicht mehr prüfen lässt.
+			$server->getLogger()->error(
+				'OpenID Connect is configured, but no distributed memory cache (memcache.distributed) is set up. OpenID Connect is skipped.',
+				['app' => self::APPID]
+			);
+			if ($server->getSession()->get('oca.openid-connect.access-token') !== null) {
+				$server->getUserSession()->logout();
+			}
+			return;
 		}
 		$this->logger = new Logger($server->getLogger());
 

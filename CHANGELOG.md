@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/).
 
+## [3.0.4] - 2026-11-13
+
+### Behoben
+- Ohne verteilten Zwischenspeicher sperrt OpenID Connect nicht mehr die ganze Weboberfläche (vorher HTTP 503 auf jeder Seite, auch Anmeldung und Verwaltung). Die Verwaltungsseite nennt die fehlende Voraussetzung und speichert erst, wenn sie erfüllt ist.
+- Ist der Anbieter nicht erreichbar, erscheint eine übersetzte Fehlerseite mit „Zurück zur Anmeldung“; bei automatischer Weiterleitung führt sie zur Anmeldung mit Kennwort.
+- Fehlerseite der Anmeldung: „Zurück zur Anmeldung“ ist der Hauptknopf der Karte, „Beim Anbieter abmelden“ ein Verweis darunter.
+- Verwaltung: „Systemkonfiguration verwenden“ steht links, „Speichern“ rechts; fehlende Pflichtfelder meldet die Seite selbst statt der Browserblase.
+
 ## [3.0.3] - 2026-11-04
 
 ### Geändert

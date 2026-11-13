@@ -68,6 +68,10 @@
     "Use token introspection for user info" : "Benutzerinformationen über die Token-Introspection abfragen",
     "User ID" : "Benutzer-ID",
     "User mapping" : "Zuordnung der Konten",
-    "config.php" : "config.php"
+    "config.php" : "config.php",
+    "OpenID Connect needs a distributed memory cache (memcache.distributed in config.php). The configuration was not saved." : "OpenID Connect braucht einen verteilten Zwischenspeicher (memcache.distributed in config.php). Die Konfiguration wurde nicht gespeichert.",
+    "OpenID Connect needs a distributed memory cache (memcache.distributed in config.php). Until it is set up, sign-in via OpenID Connect stays off." : "OpenID Connect braucht einen verteilten Zwischenspeicher (memcache.distributed in config.php). Bis er eingerichtet ist, bleibt die Anmeldung über OpenID Connect aus.",
+    "Sign-in with the identity provider failed." : "Die Anmeldung beim Identitätsanbieter ist gescheitert.",
+    "The identity provider could not be reached or rejected the request. Please try again later or contact your administrator." : "Der Identitätsanbieter war nicht erreichbar oder hat die Anfrage abgelehnt. Versuchen Sie es bitte später erneut oder wenden Sie sich an Ihren Administrator."
 },"pluralForm" :"nplurals=2; plural=(n != 1);"
 }

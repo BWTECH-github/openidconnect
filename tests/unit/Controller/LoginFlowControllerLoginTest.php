@@ -116,10 +116,13 @@ class LoginFlowControllerLoginTest extends TestCase {
 	public function testLoginAuthenticateThrowsException(): void {
 		$this->client->method('getOpenIdConfig')->willReturn([]);
 		$this->client->method('authenticate')->willThrowException(new OpenIDConnectClientException('foo'));
-		$this->expectException(HintException::class);
-		$this->expectExceptionMessage('Error in OpenIdConnect:foo');
+		$this->logger->expects(self::once())->method('logException');
 
-		$this->controller->login();
+		$response = $this->controller->login();
+
+		self::assertSame('login-failed', $response->getTemplateName());
+		self::assertSame(503, $response->getStatus());
+		self::assertSame('provider', $response->getParams()['reason']);
 	}
 
 	public function providesProviderFailures(): array {
@@ -133,9 +136,10 @@ class LoginFlowControllerLoginTest extends TestCase {
 	}
 
 	/**
-	 * Anbieter nicht erreichbar: kontrollierte Fehlerseite (HintException ->
-	 * 503 im Kern) statt HTTP 500, ohne interne Adressen und ohne Stacktrace im
-	 * Protokoll - die Ursache hat Client::fetchURL() schon protokolliert.
+	 * Anbieter nicht erreichbar: übersetzte Fehlerseite mit Status 503 statt
+	 * HTTP 500, ohne interne Adressen, ohne Rückfrage beim Anbieter und ohne
+	 * Stacktrace im Protokoll - die Ursache hat Client::fetchURL() schon
+	 * protokolliert.
 	 *
 	 * @dataProvider providesProviderFailures
 	 */
@@ -150,14 +154,15 @@ class LoginFlowControllerLoginTest extends TestCase {
 		$this->userLookup->expects(self::never())->method('lookupUser');
 		$this->logger->expects(self::never())->method('logException');
 		$this->logger->expects(self::never())->method('error');
+		$this->client->expects(self::never())->method('getEndSessionEndpoint');
 
-		try {
-			$this->controller->login();
-			self::fail('expected a HintException');
-		} catch (HintException $ex) {
-			self::assertSame('Sign-in with the identity provider failed', $ex->getMessage());
-			self::assertStringNotContainsString('idp.internal.example', $ex->getMessage() . $ex->getHint());
-		}
+		$response = $this->controller->login();
+
+		self::assertSame('login-failed', $response->getTemplateName());
+		self::assertSame('guest', $response->getRenderAs());
+		self::assertSame(503, $response->getStatus());
+		self::assertSame('provider', $response->getParams()['reason']);
+		self::assertStringNotContainsString('idp.internal.example', \json_encode($response->getParams()));
 	}
 
 	/**
@@ -167,10 +172,14 @@ class LoginFlowControllerLoginTest extends TestCase {
 	public function testLoginUserInfoClientExceptionIsReported(): void {
 		$this->client->method('getOpenIdConfig')->willReturn([]);
 		$this->client->method('getUserInfo')->willThrowException(new OpenIDConnectClientException('Invalid JWT signature'));
-		$this->expectException(HintException::class);
-		$this->expectExceptionMessage('Error in OpenIdConnect:Invalid JWT signature');
+		$this->logger->expects(self::once())->method('logException');
 
-		$this->controller->login();
+		$response = $this->controller->login();
+
+		self::assertSame(503, $response->getStatus());
+		self::assertSame('provider', $response->getParams()['reason']);
+		// Der Ausnahmetext steht nur im Protokoll, nicht auf der Seite.
+		self::assertStringNotContainsString('Invalid JWT', \json_encode($response->getParams()));
 	}
 
 	public function testLoginNoUserInfo(): void {
@@ -201,8 +210,8 @@ class LoginFlowControllerLoginTest extends TestCase {
 	}
 
 	/**
-	 * Leitet die Anmeldeseite sofort zum Anbieter weiter, führt der Rückweg im
-	 * Kreis - dann gibt es keinen.
+	 * Leitet die Anmeldeseite sofort zum Anbieter weiter, führt der Rückweg auf
+	 * die Anmeldeseite mit direct=1 - LoginPageBehaviour leitet dann nicht weiter.
 	 */
 	public function testLoginUnknownUserWithAutoRedirect(): void {
 		$this->client->method('getOpenIdConfig')->willReturn(['autoRedirectOnLoginPage' => true, 'loginButtonName' => 'Firmen-SSO']);
@@ -211,7 +220,7 @@ class LoginFlowControllerLoginTest extends TestCase {
 
 		$response = $this->controller->login();
 
-		self::assertSame('', $response->getParams()['loginUrl']);
+		self::assertStringContainsString('direct=1', $response->getParams()['loginUrl']);
 	}
 
 	/**
